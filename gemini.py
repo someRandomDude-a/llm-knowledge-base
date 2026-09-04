@@ -7,7 +7,7 @@ import shutil
 
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import httpx2
 
@@ -694,6 +694,7 @@ class GeminiCore:
     async def get_response(
         self,
         prompt: str,
+        tools: Optional[list[types.Tool]] = None,
     ) -> str:
 
         if not self.started:
@@ -701,6 +702,15 @@ class GeminiCore:
             raise RuntimeError(
                 "GeminiCore has not been started."
             )
+
+        # --------------------------------------------------------------
+        # If the caller passed a filtered tool list, use it.
+        # Otherwise expose every registered MCP tool.
+        # --------------------------------------------------------------
+
+        tools_to_use = (
+            tools if tools is not None else self.gemini_tools
+        )
 
         # --------------------------------------------------------------
         # Conversation for THIS request.
@@ -742,7 +752,7 @@ class GeminiCore:
 
             config = types.GenerateContentConfig(
                 temperature=0,
-                tools=self.gemini_tools, #type: ignore
+                tools=tools_to_use, #type: ignore
             )
 
             response = (
@@ -836,6 +846,41 @@ class GeminiCore:
             "Gemini exceeded the maximum number "
             "of MCP tool rounds."
         )
+
+    # ==================================================================
+    # Tool discovery (public)
+    # ==================================================================
+
+    def list_mcp_tools(
+        self,
+    ) -> list[dict[str, str]]:
+        """
+        Public, JSON-friendly description of every available tool.
+
+        Returns the *gemini-side* name (which is what callers
+        pass back to /chat) and the MCP tool's description.
+        """
+
+        result: list[dict[str, str]] = []
+
+        for (
+            gemini_name,
+            tool,
+        ) in self.mcp_tools.items():
+
+            description = (
+                getattr(tool, "description", None)
+                or f"MCP tool: {getattr(tool, 'name', gemini_name)}"
+            )
+
+            result.append(
+                {
+                    "name": str(gemini_name),
+                    "description": str(description),
+                }
+            )
+
+        return result
 
     # ==================================================================
     # Shutdown
