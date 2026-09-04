@@ -127,7 +127,36 @@ class Agent:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _decl_name(decl: Any) -> Optional[str]:
+        """
+        Extract a tool name from a function declaration.
+
+        In this project `gemini.py` populates
+        `tool.function_declarations` with plain dicts (the
+        `# type: ignore` next to `declaration` in
+        `_register_tools` is the tell), so at runtime
+        `decl["name"]` works. The type stub, however, says
+        those entries are `google.genai.types.FunctionDeclaration`
+        objects, which don't expose `__getitem__` or `.get`.
+
+        This helper handles both shapes without sprinkling
+        `# type: ignore` around the call site.
+        """
+        # dict path (what gemini.py actually does at runtime)
+        if isinstance(decl, dict):
+            name = decl.get("name")
+            return str(name) if name is not None else None
+
+        # typed path: FunctionDeclaration exposes `.name` as a str
+        name = getattr(decl, "name", None)
+        if name is not None:
+            return str(name)
+
+        return None
+
+    @classmethod
     def _filter_tools(
+        cls,
         llm: GeminiCore,
         enabled_names: Optional[list[str]],
     ) -> Optional[list[Any]]:
@@ -163,14 +192,12 @@ class Agent:
                 tool.function_declarations or []
             )
 
-            kept = [
-                decl
-                for decl in declarations
-                if decl.get("name") in wanted
-            ]
-
-            for decl in kept:
-                matched.add(decl["name"])
+            kept: list[Any] = []
+            for decl in declarations:
+                name = cls._decl_name(decl)
+                if name is not None and name in wanted:
+                    kept.append(decl)
+                    matched.add(name)
 
             if kept:
                 filtered.append(
