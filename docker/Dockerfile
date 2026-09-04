@@ -17,5 +17,5 @@ COPY code/ code/
 EXPOSE 8005
 
 WORKDIR /app/code
-ENV WORKERS 2
+ENV WORKERS=2
 CMD ["sh", "-c", "python -m healthcheck & uvicorn api:app --host 0.0.0.0 --port 8005 --workers ${WORKERS}"]
