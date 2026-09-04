@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY code/ code/
 
-EXPOSE 8001
+EXPOSE 8005
 
 WORKDIR /app/code
 ENV WORKERS 2
