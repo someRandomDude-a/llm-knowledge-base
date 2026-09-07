@@ -180,3 +180,4 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 mcp.json
+docker/llm_pgdata
