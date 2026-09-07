@@ -1,16 +1,16 @@
 # agent.py
 
+import asyncio
+import logging
 import os
-import threading
 from typing import Any, Optional
 
-from gemini import GeminiCore
-from context import (
-    ContextBuilder,
-    Conversation,
-    MemoryStore,
-)
+from gemini_core import GeminiCore
+from context import ContextBuilder, Conversation
+from google.genai import types
+from google.genai.types import FunctionDeclaration
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_SYSTEM_PROMPT = """
 You are a helpful AI assistant.
@@ -30,10 +30,7 @@ Be concise by default, but provide detail when useful.
 
 
 def _default_window_size() -> int:
-    """
-    Rolling-window size in number of messages (user+assistant
-    turns combined). Override with the CHAT_WINDOW_SIZE env var.
-    """
+    """Rolling-window size in number of messages."""
     try:
         return max(1, int(os.getenv("CHAT_WINDOW_SIZE", "20")))
     except ValueError:
@@ -42,17 +39,7 @@ def _default_window_size() -> int:
 
 class Agent:
     """
-    High-level AI agent.
-
-    Backwards compatible with the original CLI usage:
-
-        agent = Agent(mcp_config="mcp.json")
-        await agent.start()
-        response = await agent.get_llm_response(query)
-        await agent.close()
-
-    In API mode a single `GeminiCore` is shared across many users
-    and a `ChatHistoryDB` is passed in for persistent context.
+    High-level AI agent, per user.
     """
 
     def __init__(
@@ -66,36 +53,25 @@ class Agent:
         llm: Optional[GeminiCore] = None,
         window_size: Optional[int] = None,
     ):
-
         if llm is None:
-            # Backwards-compatible: own the LLM.
-            self.llm = GeminiCore(
-                mcp_config_path=mcp_config,
-                model=model,
-            )
+            self.llm = GeminiCore(mcp_config_path=mcp_config, model=model)
             self._owns_llm = True
         else:
-            # API mode: the manager owns the LLM.
             self.llm = llm
             self._owns_llm = False
 
         self.user_id = user_id
         self.db = db
-        self.window_size = (
-            window_size
-            if window_size is not None
-            else _default_window_size()
-        )
+        self.window_size = window_size if window_size is not None else _default_window_size()
 
         self.conversation = Conversation()
-
-        self.memory = MemoryStore()
-
         self.context = ContextBuilder(
             system_prompt=system_prompt,
             conversation=self.conversation,
-            memory=self.memory,
         )
+
+        # Per‑agent lock to serialise requests for the same user
+        self._request_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -114,128 +90,84 @@ class Agent:
     # ------------------------------------------------------------------
 
     def list_tools(self) -> list[dict[str, str]]:
-        """
-        Return the JSON-friendly list of available tools.
-
-        Format:
-            [{"name": "...", "description": "..."}, ...]
-        """
         return self.llm.list_mcp_tools()
 
     # ------------------------------------------------------------------
-    # Tool filtering
+    # Tool filtering (unchanged, but now uses `decl.name`)
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _decl_name(decl: Any) -> Optional[str]:
-        """
-        Extract a tool name from a function declaration.
-
-        In this project `gemini.py` populates
-        `tool.function_declarations` with plain dicts (the
-        `# type: ignore` next to `declaration` in
-        `_register_tools` is the tell), so at runtime
-        `decl["name"]` works. The type stub, however, says
-        those entries are `google.genai.types.FunctionDeclaration`
-        objects, which don't expose `__getitem__` or `.get`.
-
-        This helper handles both shapes without sprinkling
-        `# type: ignore` around the call site.
-        """
-        # dict path (what gemini.py actually does at runtime)
-        if isinstance(decl, dict):
-            name = decl.get("name")
-            return str(name) if name is not None else None
-
-        # typed path: FunctionDeclaration exposes `.name` as a str
-        name = getattr(decl, "name", None)
-        if name is not None:
-            return str(name)
-
-        return None
 
     @classmethod
     def _filter_tools(
         cls,
         llm: GeminiCore,
         enabled_names: Optional[list[str]],
-    ) -> Optional[list[Any]]:
-        """
-        Restrict the toolset exposed to Gemini for one request.
-
-        - `enabled_names is None`  -> keep all tools
-        - `enabled_names == []`    -> disable all tools
-        - otherwise                -> keep only the named tools
-        """
+    ) -> Optional[list[types.Tool]]:
         if enabled_names is None:
             return None
-
         if not enabled_names:
             return []
 
-        wanted = {
-            str(name) for name in enabled_names
-        }
-
-        # Track which requested names we actually matched, so
-        # the caller can spot typos / unknown tools.
-        matched: set[str] = set()
-
-        from google.genai import types  # local import keeps the
-                                        # top of the file light
+        wanted = {str(name) for name in enabled_names}
+        matched = set()
 
         filtered: list[types.Tool] = []
-
         for tool in llm.gemini_tools:
-
-            declarations = (
-                tool.function_declarations or []
-            )
-
-            kept: list[Any] = []
+            declarations = tool.function_declarations or []
+            kept = []
             for decl in declarations:
-                name = cls._decl_name(decl)
+                # decl is now a FunctionDeclaration object
+                name = decl.name
                 if name is not None and name in wanted:
                     kept.append(decl)
                     matched.add(name)
-
             if kept:
-                filtered.append(
-                    types.Tool(
-                        function_declarations=kept
-                    )
-                )
+                filtered.append(types.Tool(function_declarations=kept))
 
         unknown = wanted - matched
         if unknown:
-            print(
-                f"[Agent] Unknown tool names requested: "
-                f"{sorted(unknown)}"
-            )
-
+            logger.warning("[Agent] Unknown tool names requested: %s", sorted(unknown))
         return filtered
 
     # ------------------------------------------------------------------
-    # Persistent rolling window
+    # Persistent rolling window + memories
     # ------------------------------------------------------------------
 
-    def _load_window(self) -> None:
+    async def _load_context(self) -> tuple[list[Any], list[str]]:
         """
-        Replace the in-memory conversation with the most recent
-        `window_size` messages from the DB.
-
-        No rows are deleted - this is a read.
+        Load recent messages and memories from DB.
+        Returns (messages, memories).
         """
         if self.db is None or not self.user_id:
-            return
+            # No persistence – use in‑memory conversation, empty memories
+            return self.conversation.messages, []
 
-        recent = self.db.get_recent_messages(
-            self.user_id,
-            self.window_size,
-        )
-
+        # Load window
+        recent = await self.db.get_recent_messages(self.user_id, self.window_size)
         self.conversation.messages.clear()
         self.conversation.messages.extend(recent)
+
+        # Load memories
+        memories = await self.db.get_memories(self.user_id)
+        return self.conversation.messages, memories
+
+    # ------------------------------------------------------------------
+    # Memory management (persistent)
+    # ------------------------------------------------------------------
+
+    async def remember(self, memory: str) -> None:
+        if self.db and self.user_id:
+            await self.db.add_memory(self.user_id, memory)
+        else:
+            logger.warning("No DB configured – memory not persisted.")
+
+    async def forget(self, memory: str) -> None:
+        if self.db and self.user_id:
+            await self.db.delete_memory(self.user_id, memory)
+
+    async def get_memories(self) -> list[str]:
+        if self.db and self.user_id:
+            return await self.db.get_memories(self.user_id)
+        return []
 
     # ------------------------------------------------------------------
     # Main interface
@@ -247,73 +179,32 @@ class Agent:
         enabled_tools: Optional[list[str]] = None,
     ) -> str:
         """
-        Main agent function.
-
-        Everything goes through here.
+        Main agent function – serialised per user.
         """
+        async with self._request_lock:
+            # 1. Load context (messages + memories) from DB
+            _, memories = await self._load_context()
 
-        # 1. Pull the rolling window from the DB (if persistent).
-        self._load_window()
+            # 2. Build prompt
+            prompt = self.context.build(query, memories=memories)
 
-        # 2. Build the prompt from the current conversation
-        #    (which is now the rolling window) plus the new query.
-        prompt = self.context.build(query)
+            # 3. Ask Gemini with optional tool filter
+            tools_to_use = self._filter_tools(self.llm, enabled_tools)
+            response = await self.llm.get_response(prompt, tools=tools_to_use)
 
-        # 3. Ask Gemini, with an optional tool filter.
-        tools_to_use = self._filter_tools(
-            self.llm,
-            enabled_tools,
-        )
+            # 4. Persist both sides (if persistent)
+            if self.db is not None and self.user_id:
+                await self.db.add_message(self.user_id, "user", query, enabled_tools)
+                await self.db.add_message(self.user_id, "assistant", response, enabled_tools)
 
-        response = await self.llm.get_response(
-            prompt,
-            tools=tools_to_use,
-        )
+            # 5. Update in‑memory conversation for subsequent turns within same request
+            self.conversation.add_user(query)
+            self.conversation.add_assistant(response)
 
-        # 4. Persist both sides of the exchange (if persistent).
-        #    Past interactions are never deleted.
-        if self.db is not None and self.user_id:
-            self.db.add_message(
-                self.user_id,
-                "user",
-                query,
-                enabled_tools,
-            )
-            self.db.add_message(
-                self.user_id,
-                "assistant",
-                response,
-                enabled_tools,
-            )
-
-        # 5. Update the in-memory conversation so the same
-        #    process can keep chatting within this turn.
-        self.conversation.add_user(query)
-        self.conversation.add_assistant(response)
-
-        return response
+            return response
 
     # ------------------------------------------------------------------
-    # Memory
-    # ------------------------------------------------------------------
-
-    def remember(
-        self,
-        memory: str,
-    ):
-        self.memory.add(memory)
-
-    def forget(
-        self,
-        memory: str,
-    ):
-        self.memory.remove(memory)
-
-    def get_memories(self) -> list[str]:
-        return self.memory.all()
-
-    # ------------------------------------------------------------------
-    # Conversation
+    # Conversation (in‑memory)
     # ------------------------------------------------------------------
 
     def clear_conversation(self):
@@ -326,9 +217,7 @@ class Agent:
 class AgentManager:
     """
     Manages one shared `GeminiCore` (and its MCP connections)
-    across many per-user `Agent` instances.
-
-    This is what the Flask API uses.
+    across many per‑user `Agent` instances.
     """
 
     def __init__(
@@ -340,19 +229,12 @@ class AgentManager:
         db: Optional[Any] = None,
         window_size: Optional[int] = None,
     ):
-        self.llm = GeminiCore(
-            mcp_config_path=mcp_config,
-            model=model,
-        )
+        self.llm = GeminiCore(mcp_config_path=mcp_config, model=model)
         self.system_prompt = system_prompt
         self.db = db
-        self.window_size = (
-            window_size
-            if window_size is not None
-            else _default_window_size()
-        )
+        self.window_size = window_size if window_size is not None else _default_window_size()
 
-        self._agents_lock = threading.Lock()
+        self._agents_lock = asyncio.Lock()
         self._agents: dict[str, Agent] = {}
 
     # ------------------------------------------------------------------
@@ -366,11 +248,11 @@ class AgentManager:
         await self.llm.close()
 
     # ------------------------------------------------------------------
-    # Per-user agent cache
+    # Per‑user agent cache
     # ------------------------------------------------------------------
 
-    def get_agent(self, user_id: str) -> Agent:
-        with self._agents_lock:
+    async def get_agent(self, user_id: str) -> Agent:
+        async with self._agents_lock:
             agent = self._agents.get(user_id)
             if agent is None:
                 agent = Agent(
@@ -390,6 +272,9 @@ class AgentManager:
     def list_tools(self) -> list[dict[str, str]]:
         return self.llm.list_mcp_tools()
 
+    def get_mcp_status(self) -> list[dict[str, str]]:
+        return self.llm.get_mcp_status()
+
     # ------------------------------------------------------------------
     # Chat
     # ------------------------------------------------------------------
@@ -400,8 +285,5 @@ class AgentManager:
         query: str,
         enabled_tools: Optional[list[str]] = None,
     ) -> str:
-        agent = self.get_agent(user_id)
-        return await agent.get_llm_response(
-            query,
-            enabled_tools=enabled_tools,
-        )
+        agent = await self.get_agent(user_id)
+        return await agent.get_llm_response(query, enabled_tools=enabled_tools)

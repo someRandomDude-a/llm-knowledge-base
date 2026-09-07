@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Agent Test UI</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f7fa;
+            color: #1e293b;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.15);
+            padding: 2rem 2rem 2.5rem;
+        }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+            border-left: 3px solid #818cf8;
+            padding-left: 1rem;
+        }
+        .status-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem 2rem;
+            background: #f8fafc;
+            padding: 0.75rem 1.25rem;
+            border-radius: 2rem;
+            margin-bottom: 2rem;
+            align-items: center;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .status-badge {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #94a3b8;
+            flex-shrink: 0;
+        }
+        .status-badge.ok {
+            background: #22c55e;
+        }
+        .status-badge.fail {
+            background: #ef4444;
+        }
+        .status-badge.loading {
+            background: #facc15;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        .btn {
+            background: #e2e8f0;
+            border: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 2rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.15s;
+            color: #1e293b;
+        }
+        .btn:hover {
+            background: #cbd5e1;
+        }
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #4f46e5;
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #cbd5e1;
+        }
+        .btn-outline:hover {
+            background: #f1f5f9;
+        }
+        .btn-sm {
+            padding: 0.35rem 1rem;
+            font-size: 0.8rem;
+        }
+        .section {
+            margin-top: 2rem;
+            border-top: 1px solid #e9edf2;
+            padding-top: 1.5rem;
+        }
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            font-size: 0.9rem;
+            margin-bottom: 0.3rem;
+            color: #334155;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 0.65rem 0.9rem;
+            border: 1px solid #d1d9e6;
+            border-radius: 0.75rem;
+            font-size: 0.95rem;
+            background: #fcfcfd;
+            transition: 0.15s;
+            font-family: inherit;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: 2px solid #818cf8;
+            outline-offset: 1px;
+            border-color: transparent;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .tool-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 0.75rem;
+            background: #f8fafc;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #e2e8f0;
+            min-height: 3rem;
+            align-items: center;
+        }
+        .tool-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #eef2ff;
+            padding: 0.3rem 0.9rem 0.3rem 0.7rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            border: 1px solid #c7d2fe;
+            user-select: none;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .tool-chip.selected {
+            background: #6366f1;
+            color: white;
+            border-color: #6366f1;
+        }
+        .tool-chip.selected .tool-check {
+            filter: brightness(10);
+        }
+        .tool-check {
+            font-weight: 700;
+            font-size: 0.7rem;
+            opacity: 0.6;
+        }
+        .tool-chip:hover {
+            background: #d9e2ff;
+        }
+        .tool-chip.selected:hover {
+            background: #4f46e5;
+        }
+        .tool-chip .tool-name {
+            font-weight: 500;
+        }
+        .no-tools {
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+        .action-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .response-box {
+            background: #0b1121;
+            color: #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9rem;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 0.75rem;
+            border: 1px solid #1e293b;
+            line-height: 1.5;
+        }
+        .response-box .empty {
+            color: #64748b;
+            font-style: italic;
+            font-family: system-ui;
+        }
+        .response-box.error {
+            color: #fca5a5;
+            background: #1e1b2a;
+            border-color: #7f1d1d;
+        }
+        .loading-indicator {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid #e2e8f0;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .flex-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .meta-info {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .badge {
+            background: #e9edf2;
+            padding: 0.15rem 0.6rem;
+            border-radius: 1rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #334155;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 1.5rem 0;
+        }
+        @media (max-width: 600px) {
+            .container { padding: 1.25rem; }
+            .status-bar { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+            .action-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" id="app">
+    <h1>🧠 LLM Agent Tester</h1>
+    <div class="subtitle">
+        FastAPI + Gemini + MCP — chat with your knowledge-base agent
+    </div>
+
+    <!-- Server status -->
+    <div class="status-bar">
+        <div class="status-item">
+            <span class="status-badge" id="healthBadge"></span>
+            <span id="healthText">Checking health…</span>
+            <button class="btn btn-sm btn-outline" id="healthBtn">Refresh</button>
+        </div>
+        <div class="status-item">
+            <span>🛠️ <span id="toolCount">0</span> tools</span>
+            <button class="btn btn-sm btn-outline" id="toolsBtn">List</button>
+        </div>
+        <div class="status-item meta-info">
+            <span id="windowSize"></span> &middot;
+            <span id="cachedUsers"></span>
+        </div>
+    </div>
+
+    <!-- Chat form -->
+    <div class="section">
+        <div class="section-title">
+            💬 Chat
+            <span class="badge">POST /chat</span>
+        </div>
+
+        <div class="form-group">
+            <label for="userInput">User ID</label>
+            <input type="text" id="userInput" placeholder="e.g. user-123 or anonymous" value="test-user" />
+        </div>
+
+        <div class="form-group">
+            <label for="queryInput">Query</label>
+            <textarea id="queryInput" placeholder="Ask anything…">What is the capital of France?</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Tool selection <span style="font-weight:400;color:#64748b;">(click to toggle)</span></label>
+            <div class="tool-grid" id="toolGrid">
+                <span class="no-tools">Loading tools…</span>
+            </div>
+            <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-outline" id="selectAllTools">Select all</button>
+                <button class="btn btn-sm btn-outline" id="deselectAllTools">Deselect all</button>
+                <span style="font-size:0.8rem;color:#64748b;align-self:center;">
+                    <span id="selectedToolCount">0</span> selected
+                </span>
+            </div>
+        </div>
+
+        <div class="action-row">
+            <button class="btn btn-primary" id="sendBtn">
+                <span id="sendLabel">Send</span>
+                <span id="sendSpinner" style="display:none;" class="loading-indicator"></span>
+            </button>
+            <button class="btn btn-outline" id="clearResponseBtn">Clear response</button>
+        </div>
+
+        <div class="form-group" style="margin-top:1.5rem;">
+            <label>Response</label>
+            <div class="response-box" id="responseBox">
+                <span class="empty">Your response will appear here</span>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:space-between;align-items:center;">
+        <div style="font-size:0.8rem;color:#94a3b8;">
+            Server: <span id="serverUrl">http://localhost:8005</span>
+        </div>
+        <div>
+            <button class="btn btn-sm btn-outline" id="resetUserBtn">Reset user context</button>
+            <button class="btn btn-sm btn-outline" id="healthBtn2">Health</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        'use strict';
+
+        // ---- DOM refs ----
+        const healthBadge = document.getElementById('healthBadge');
+        const healthText = document.getElementById('healthText');
+        const healthBtn = document.getElementById('healthBtn');
+        const healthBtn2 = document.getElementById('healthBtn2');
+        const toolsBtn = document.getElementById('toolsBtn');
+        const toolCount = document.getElementById('toolCount');
+        const windowSizeEl = document.getElementById('windowSize');
+        const cachedUsersEl = document.getElementById('cachedUsers');
+        const toolGrid = document.getElementById('toolGrid');
+        const selectAllBtn = document.getElementById('selectAllTools');
+        const deselectAllBtn = document.getElementById('deselectAllTools');
+        const selectedToolCount = document.getElementById('selectedToolCount');
+        const userInput = document.getElementById('userInput');
+        const queryInput = document.getElementById('queryInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const sendLabel = document.getElementById('sendLabel');
+        const sendSpinner = document.getElementById('sendSpinner');
+        const responseBox = document.getElementById('responseBox');
+        const clearResponseBtn = document.getElementById('clearResponseBtn');
+        const resetUserBtn = document.getElementById('resetUserBtn');
+        const serverUrlSpan = document.getElementById('serverUrl');
+
+        // ---- state ----
+        const BASE_URL = 'http://localhost:8005';  // adjust if needed
+        let availableTools = [];       // array of {name, description}
+        let selectedTools = new Set(); // names of selected tools
+        let isSending = false;
+
+        // ---- helpers ----
+        function setHealth(status, message) {
+            healthBadge.className = 'status-badge';
+            if (status === 'ok') {
+                healthBadge.classList.add('ok');
+                healthText.textContent = message || 'Healthy';
+            } else if (status === 'loading') {
+                healthBadge.classList.add('loading');
+                healthText.textContent = message || 'Checking…';
+            } else {
+                healthBadge.classList.add('fail');
+                healthText.textContent = message || 'Unreachable';
+            }
+        }
+
+        function setResponse(text, isError = false) {
+            responseBox.className = 'response-box' + (isError ? ' error' : '');
+            if (!text) {
+                responseBox.innerHTML = '<span class="empty">Your response will appear here</span>';
+                return;
+            }
+            // Preserve whitespace and escape HTML entities (basic)
+            const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            responseBox.textContent = text; // use textContent to avoid injection
+            // but we want to keep formatting, so we can set innerHTML with pre-wrap.
+            // Actually textContent will lose line breaks, but we want to preserve them.
+            // So we'll use innerHTML with escaped string.
+            // Safer: use textContent and then style white-space: pre-wrap already applied.
+            // But textContent will not interpret HTML tags, so it's safe.
+            // However we want line breaks, so we use innerHTML with <br>? Let's just use textContent and rely on pre-wrap.
+            responseBox.textContent = text;
+        }
+
+        function setErrorResponse(text) {
+            setResponse(text, true);
+        }
+
+        function updateToolUI() {
+            if (!availableTools.length) {
+                toolGrid.innerHTML = '<span class="no-tools">No tools available</span>';
+                selectedTools.clear();
+                updateSelectedCount();
+                return;
+            }
+            let html = '';
+            for (const t of availableTools) {
+                const selected = selectedTools.has(t.name) ? 'selected' : '';
+                html += `
+                    <span class="tool-chip ${selected}" data-tool="${t.name}" title="${t.description || ''}">
+                        <span class="tool-check">${selected ? '✓' : '☐'}</span>
+                        <span class="tool-name">${t.name}</span>
+                    </span>
+                `;
+            }
+            toolGrid.innerHTML = html;
+            // attach click listeners
+            document.querySelectorAll('.tool-chip').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    const name = this.dataset.tool;
+                    if (selectedTools.has(name)) {
+                        selectedTools.delete(name);
+                    } else {
+                        selectedTools.add(name);
+                    }
+                    updateToolUI();
+                });
+            });
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            selectedToolCount.textContent = selectedTools.size;
+        }
+
+        function getSelectedToolsArray() {
+            return selectedTools.size === 0 ? null : Array.from(selectedTools);
+        }
+
+        // ---- API calls ----
+        async function fetchHealth() {
+            setHealth('loading', 'Checking…');
+            try {
+                const resp = await fetch(`${BASE_URL}/health`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                setHealth('ok', 'Healthy');
+                if (data.window_size !== undefined) windowSizeEl.textContent = `window: ${data.window_size}`;
+                if (data.users_cached !== undefined) cachedUsersEl.textContent = `users: ${data.users_cached}`;
+                return data;
+            } catch (err) {
+                setHealth('fail', `Error: ${err.message}`);
+                windowSizeEl.textContent = '';
+                cachedUsersEl.textContent = '';
+                throw err;
+            }
+        }
+
+        async function fetchTools() {
+            try {
+                const resp = await fetch(`${BASE_URL}/tools`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                availableTools = data.tools || [];
+                toolCount.textContent = availableTools.length;
+                // reset selection? We'll keep existing selections but remove any that no longer exist.
+                const newSet = new Set();
+                for (const t of availableTools) {
+                    if (selectedTools.has(t.name)) newSet.add(t.name);
+                }
+                selectedTools = newSet;
+                updateToolUI();
+                updateSelectedCount();
+                return data;
+            } catch (err) {
+                toolCount.textContent = '?';
+                toolGrid.innerHTML = `<span class="no-tools">Error loading tools: ${err.message}</span>`;
+                throw err;
+            }
+        }
+
+        async function sendChat(user, query, tools) {
+            if (isSending) return;
+            isSending = true;
+            sendBtn.disabled = true;
+            sendLabel.textContent = 'Sending';
+            sendSpinner.style.display = 'inline-block';
+            setResponse(''); // clear
+
+            const payload = {
+                user: user,
+                query: query,
+                tools: tools
+            };
+
+            try {
+                const resp = await fetch(`${BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    const errorMsg = data.detail || data.error || `HTTP ${resp.status}`;
+                    setErrorResponse(`❌ Error: ${errorMsg}`);
+                } else {
+                    if (data.response) {
+                        setResponse(data.response);
+                    } else {
+                        setResponse('⚠️ Received empty response from server.');
+                    }
+                }
+            } catch (err) {
+                setErrorResponse(`❌ Network error: ${err.message}`);
+            } finally {
+                isSending = false;
+                sendBtn.disabled = false;
+                sendLabel.textContent = 'Send';
+                sendSpinner.style.display = 'none';
+            }
+        }
+
+        // ---- UI event binding ----
+        async function refreshHealth() {
+            try {
+                await fetchHealth();
+            } catch (_) { /* ignore */ }
+        }
+
+        async function refreshTools() {
+            try {
+                await fetchTools();
+            } catch (_) { /* ignore */ }
+        }
+
+        function clearResponse() {
+            setResponse('');
+        }
+
+        function resetUser() {
+            // just a convenience: clear response and maybe update user field
+            clearResponse();
+            // Optionally we could set a new user ID, but we leave it.
+        }
+
+        function selectAll() {
+            selectedTools = new Set(availableTools.map(t => t.name));
+            updateToolUI();
+        }
+
+        function deselectAll() {
+            selectedTools.clear();
+            updateToolUI();
+        }
+
+        // ---- init ----
+        async function init() {
+            serverUrlSpan.textContent = BASE_URL;
+
+            // Bind events
+            healthBtn.addEventListener('click', refreshHealth);
+            healthBtn2.addEventListener('click', refreshHealth);
+            toolsBtn.addEventListener('click', refreshTools);
+            sendBtn.addEventListener('click', async () => {
+                const user = userInput.value.trim();
+                if (!user) {
+                    setErrorResponse('❌ User ID cannot be empty.');
+                    return;
+                }
+                const query = queryInput.value.trim();
+                if (!query) {
+                    setErrorResponse('❌ Query cannot be empty.');
+                    return;
+                }
+                const tools = getSelectedToolsArray();
+                await sendChat(user, query, tools);
+            });
+            clearResponseBtn.addEventListener('click', clearResponse);
+            resetUserBtn.addEventListener('click', resetUser);
+            selectAllBtn.addEventListener('click', selectAll);
+            deselectAllBtn.addEventListener('click', deselectAll);
+
+            // load initial data
+            await Promise.all([fetchHealth(), fetchTools()]);
+        }
+
+        init();
+    })();
+</script>
+
+</body>
+</html>
