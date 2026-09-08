@@ -8,8 +8,9 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 from agent import AgentManager
@@ -17,10 +18,44 @@ from db import ChatHistoryDB
 
 logger = logging.getLogger(__name__)
 
+# ─── Security ─────────────────────────────────────────────
+security = HTTPBearer(auto_error=False)
 
-# ======================================================================
-# Request / response models
-# ======================================================================
+# Read token from environment (optional)
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
+
+async def verify_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> None:
+    """
+    Verify the Bearer token if INTERNAL_API_TOKEN is set.
+    If no token is configured, authentication is bypassed.
+    """
+    if INTERNAL_API_TOKEN is None:
+        return  # no auth required
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication scheme. Use Bearer.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials.credentials != INTERNAL_API_TOKEN:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+# ─── Models ──────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1)
@@ -109,7 +144,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/health", response_model=HealthResponse)
+    # ── Routes (all protected by verify_token) ──
+    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(verify_token)])
     async def health() -> HealthResponse:
         manager: AgentManager = app.state.manager
         return HealthResponse(
@@ -119,7 +155,7 @@ def create_app() -> FastAPI:
             mcp_servers=manager.get_mcp_status(),
         )
 
-    @app.get("/tools", response_model=ToolsResponse)
+    @app.get("/tools", response_model=ToolsResponse, dependencies=[Depends(verify_token)])
     async def list_tools() -> ToolsResponse:
         manager: AgentManager = app.state.manager
         return ToolsResponse(
@@ -127,7 +163,7 @@ def create_app() -> FastAPI:
                    for t in manager.list_tools()]
         )
 
-    @app.post("/chat", response_model=ChatResponse)
+    @app.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_token)])
     async def chat(payload: ChatRequest) -> ChatResponse:
         manager: AgentManager = app.state.manager
         try:
