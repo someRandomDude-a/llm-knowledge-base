@@ -21,20 +21,21 @@ logger = logging.getLogger(__name__)
 # ─── Security ─────────────────────────────────────────────
 security = HTTPBearer(auto_error=False)
 
-# Read token from environment (optional)
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
+if INTERNAL_API_TOKEN is not None:
+    INTERNAL_API_TOKEN = INTERNAL_API_TOKEN.strip()
+    logger.info("Internal API token is set (length: %d)", len(INTERNAL_API_TOKEN))
+else:
+    logger.info("Internal API token is not set – authentication disabled")
 
 async def verify_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> None:
-    """
-    Verify the Bearer token if INTERNAL_API_TOKEN is set.
-    If no token is configured, authentication is bypassed.
-    """
     if INTERNAL_API_TOKEN is None:
-        return  # no auth required
+        return
 
     if credentials is None:
+        logger.warning("Missing Authorization header")
         raise HTTPException(
             status_code=401,
             detail="Missing Authorization header",
@@ -42,13 +43,20 @@ async def verify_token(
         )
 
     if credentials.scheme.lower() != "bearer":
+        logger.warning("Invalid auth scheme: %s", credentials.scheme)
         raise HTTPException(
             status_code=401,
             detail="Invalid authentication scheme. Use Bearer.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if credentials.credentials != INTERNAL_API_TOKEN:
+    provided_token = credentials.credentials.strip()
+    if provided_token != INTERNAL_API_TOKEN:
+        logger.warning(
+            "Token mismatch. Provided: %s..., Expected: %s...",
+            provided_token[:10],
+            INTERNAL_API_TOKEN[:10]
+        )
         raise HTTPException(
             status_code=401,
             detail="Invalid token",
