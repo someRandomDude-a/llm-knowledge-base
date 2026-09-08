@@ -1,634 +1,786 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LLM Agent Test UI</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #f5f7fa;
-            color: #1e293b;
-            padding: 2rem 1rem;
-            display: flex;
-            justify-content: center;
-        }
-        .container {
-            max-width: 800px;
-            width: 100%;
-            background: #ffffff;
-            border-radius: 1.5rem;
-            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.15);
-            padding: 2rem 2rem 2.5rem;
-        }
-        h1 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            letter-spacing: -0.025em;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.25rem;
-        }
-        .subtitle {
-            color: #64748b;
-            font-size: 0.95rem;
-            margin-bottom: 2rem;
-            border-left: 3px solid #818cf8;
-            padding-left: 1rem;
-        }
-        .status-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem 2rem;
-            background: #f8fafc;
-            padding: 0.75rem 1.25rem;
-            border-radius: 2rem;
-            margin-bottom: 2rem;
-            align-items: center;
-        }
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.9rem;
-        }
-        .status-badge {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #94a3b8;
-            flex-shrink: 0;
-        }
-        .status-badge.ok {
-            background: #22c55e;
-        }
-        .status-badge.fail {
-            background: #ef4444;
-        }
-        .status-badge.loading {
-            background: #facc15;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
-        }
-        .btn {
-            background: #e2e8f0;
-            border: none;
-            padding: 0.5rem 1.2rem;
-            border-radius: 2rem;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: 0.15s;
-            color: #1e293b;
-        }
-        .btn:hover {
-            background: #cbd5e1;
-        }
-        .btn-primary {
-            background: #6366f1;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #4f46e5;
-        }
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        .btn-outline {
-            background: transparent;
-            border: 1px solid #cbd5e1;
-        }
-        .btn-outline:hover {
-            background: #f1f5f9;
-        }
-        .btn-sm {
-            padding: 0.35rem 1rem;
-            font-size: 0.8rem;
-        }
-        .section {
-            margin-top: 2rem;
-            border-top: 1px solid #e9edf2;
-            padding-top: 1.5rem;
-        }
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-        label {
-            display: block;
-            font-weight: 500;
-            font-size: 0.9rem;
-            margin-bottom: 0.3rem;
-            color: #334155;
-        }
-        input, textarea, select {
-            width: 100%;
-            padding: 0.65rem 0.9rem;
-            border: 1px solid #d1d9e6;
-            border-radius: 0.75rem;
-            font-size: 0.95rem;
-            background: #fcfcfd;
-            transition: 0.15s;
-            font-family: inherit;
-        }
-        input:focus, textarea:focus, select:focus {
-            outline: 2px solid #818cf8;
-            outline-offset: 1px;
-            border-color: transparent;
-        }
-        textarea {
-            min-height: 80px;
-            resize: vertical;
-        }
-        .tool-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem 0.75rem;
-            background: #f8fafc;
-            padding: 0.75rem 1rem;
-            border-radius: 0.75rem;
-            border: 1px solid #e2e8f0;
-            min-height: 3rem;
-            align-items: center;
-        }
-        .tool-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            background: #eef2ff;
-            padding: 0.3rem 0.9rem 0.3rem 0.7rem;
-            border-radius: 2rem;
-            font-size: 0.85rem;
-            border: 1px solid #c7d2fe;
-            user-select: none;
-            cursor: pointer;
-            transition: 0.1s;
-        }
-        .tool-chip.selected {
-            background: #6366f1;
-            color: white;
-            border-color: #6366f1;
-        }
-        .tool-chip.selected .tool-check {
-            filter: brightness(10);
-        }
-        .tool-check {
-            font-weight: 700;
-            font-size: 0.7rem;
-            opacity: 0.6;
-        }
-        .tool-chip:hover {
-            background: #d9e2ff;
-        }
-        .tool-chip.selected:hover {
-            background: #4f46e5;
-        }
-        .tool-chip .tool-name {
-            font-weight: 500;
-        }
-        .no-tools {
-            color: #94a3b8;
-            font-style: italic;
-            font-size: 0.9rem;
-        }
-        .action-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            margin-top: 0.5rem;
-        }
-        .response-box {
-            background: #0b1121;
-            color: #e2e8f0;
-            border-radius: 0.75rem;
-            padding: 1.25rem;
-            white-space: pre-wrap;
-            word-break: break-word;
-            font-family: 'JetBrains Mono', 'Fira Code', monospace;
-            font-size: 0.9rem;
-            max-height: 400px;
-            overflow-y: auto;
-            margin-top: 0.75rem;
-            border: 1px solid #1e293b;
-            line-height: 1.5;
-        }
-        .response-box .empty {
-            color: #64748b;
-            font-style: italic;
-            font-family: system-ui;
-        }
-        .response-box.error {
-            color: #fca5a5;
-            background: #1e1b2a;
-            border-color: #7f1d1d;
-        }
-        .loading-indicator {
-            display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            border: 2px solid #e2e8f0;
-            border-top-color: #6366f1;
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .flex-row {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        .meta-info {
-            font-size: 0.8rem;
-            color: #94a3b8;
-        }
-        .badge {
-            background: #e9edf2;
-            padding: 0.15rem 0.6rem;
-            border-radius: 1rem;
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: #334155;
-        }
-        hr {
-            border: none;
-            border-top: 1px solid #e2e8f0;
-            margin: 1.5rem 0;
-        }
-        @media (max-width: 600px) {
-            .container { padding: 1.25rem; }
-            .status-bar { flex-direction: column; align-items: stretch; gap: 0.5rem; }
-            .action-row { flex-direction: column; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🧠 Knowledge Base Agent</title>
+  <style>
+    /* ── Reset & Base ── */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(145deg, #f6f9fc 0%, #e9f1f8 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .container {
+      max-width: 820px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 2rem;
+      padding: 2rem 2rem 1.8rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25),
+                  inset 0 1px 2px rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: #4b5563;
+      font-size: 0.95rem;
+      font-weight: 400;
+      margin-bottom: 1.8rem;
+      padding-left: 0.1rem;
+      border-left: 4px solid #3b82f6;
+      padding-left: 0.9rem;
+    }
+
+    /* ── Controls Section ── */
+    .section {
+      margin-bottom: 1.2rem;
+    }
+
+    .row {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .row > * {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #374151;
+      margin-bottom: 0.3rem;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 0.6rem 0.9rem;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(4px);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    /* ── Tools row ── */
+    .tools-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tools-row input {
+      flex: 3;
+    }
+
+    .tools-row button {
+      flex: 0 0 auto;
+    }
+
+    .tool-list {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(4px);
+      padding: 0.6rem 0.8rem;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+      font-size: 0.8rem;
+      min-height: 3rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.4rem;
+    }
+
+    .tool-list span {
+      display: inline-block;
+      background: white;
+      padding: 0.2rem 0.8rem;
+      border-radius: 30px;
+      border: 1px solid #d1d5db;
+      font-weight: 500;
+      font-size: 0.75rem;
+      color: #1f2937;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .tool-list .empty {
+      color: #9ca3af;
+      font-style: italic;
+      font-weight: 400;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0.2rem 0;
+    }
+
+    /* ── Health row ── */
+    .health-row {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .health-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .health-details {
+      margin-top: 0.4rem;
+      font-size: 0.85rem;
+      color: #374151;
+      background: rgba(255, 255, 255, 0.4);
+      padding: 0.5rem 0.8rem;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      display: none;
+    }
+
+    .health-details.show {
+      display: block;
+    }
+
+    .health-details .mcp-server {
+      display: inline-block;
+      background: white;
+      padding: 0.1rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      border: 1px solid #d1d5db;
+      margin: 0.2rem 0.2rem 0 0;
+    }
+
+    /* ── Chat Box ── */
+    .chat-box {
+      border-radius: 20px;
+      padding: 1rem 1.2rem;
+      height: 380px;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      margin-bottom: 0.8rem;
+      scroll-behavior: smooth;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.02);
+    }
+
+    .chat-box::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-box::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 20px;
+    }
+
+    .message {
+      margin: 0.6rem 0;
+      padding: 0.6rem 1rem;
+      border-radius: 18px;
+      max-width: 85%;
+      word-wrap: break-word;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      animation: fadeUp 0.25s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .message.user {
+      background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+      color: #1e3a8a;
+    }
+
+    .message.assistant {
+      background: white;
+      border: 1px solid #e5e7eb;
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+      color: #1f2937;
+    }
+
+    .message.error {
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+    }
+
+    .message.tool-call {
+      background: #f3f4f6;
+      border: 1px dashed #9ca3af;
+      color: #374151;
+      font-size: 0.8rem;
+      max-width: 95%;
+      margin: 0.3rem auto;
+      text-align: center;
+      font-family: monospace;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 0.2rem;
+    }
+
+    .controls input[type="text"] {
+      flex: 2;
+      min-width: 150px;
+    }
+
+    button {
+      padding: 0.6rem 1.4rem;
+      border: none;
+      border-radius: 30px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #3b82f6;
+      color: white;
+      box-shadow: 0 4px 8px -4px rgba(59, 130, 246, 0.4);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px -6px rgba(59, 130, 246, 0.5);
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    button.secondary {
+      background: #6b7280;
+      box-shadow: 0 4px 8px -4px rgba(107, 114, 128, 0.3);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      box-shadow: 0 8px 16px -6px rgba(107, 114, 128, 0.4);
+    }
+
+    button.health-btn {
+      background: #10b981;
+      box-shadow: 0 4px 8px -4px rgba(16, 185, 129, 0.4);
+    }
+
+    button.health-btn:hover:not(:disabled) {
+      box-shadow: 0 8px 16px -6px rgba(16, 185, 129, 0.5);
+    }
+
+    .footer {
+      margin-top: 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 1rem;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      transition: background 0.2s;
+    }
+
+    .status-dot.error {
+      background: #ef4444;
+    }
+
+    .status-dot.loading {
+      background: #eab308;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .container {
+        padding: 1.2rem;
+      }
+      .header h1 {
+        font-size: 1.5rem;
+      }
+      .row {
+        flex-direction: column;
+      }
+      .controls {
+        flex-direction: column;
+      }
+      .controls input {
+        width: 100%;
+      }
+      .message {
+        max-width: 95%;
+      }
+      .health-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+
+    /* ── Dark mode ── */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: linear-gradient(145deg, #111827, #1f2937);
+      }
+      .container {
+        background: rgba(31, 41, 55, 0.8);
+        backdrop-filter: blur(16px);
+        border-color: rgba(55, 65, 81, 0.6);
+      }
+      .header h1 {
+        background: linear-gradient(135deg, #93c5fd, #fcd34d, #f87171);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .subtitle {
+        color: #9ca3af;
+        border-left-color: #60a5fa;
+      }
+      label {
+        color: #d1d5db;
+      }
+      input, select {
+        background: rgba(55, 65, 81, 0.6);
+        border-color: #4b5563;
+        color: #f3f4f6;
+      }
+      input:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25);
+      }
+      .tool-list {
+        background: rgba(55, 65, 81, 0.4);
+        border-color: #4b5563;
+      }
+      .tool-list span {
+        background: #374151;
+        border-color: #4b5563;
+        color: #e5e7eb;
+      }
+      .chat-box {
+        background: rgba(31, 41, 55, 0.5);
+        border-color: rgba(55, 65, 81, 0.6);
+      }
+      .message.user {
+        background: linear-gradient(135deg, #1e3a8a, #1e40af);
+        color: #bfdbfe;
+      }
+      .message.assistant {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+      }
+      .message.error {
+        background: #7f1d1d;
+        border-color: #991b1b;
+        color: #fecaca;
+      }
+      .message.tool-call {
+        background: #1f2937;
+        border-color: #4b5563;
+        color: #d1d5db;
+      }
+      .footer {
+        border-top-color: #374151;
+        color: #9ca3af;
+      }
+      .health-details {
+        background: rgba(55, 65, 81, 0.4);
+        border-color: #4b5563;
+        color: #d1d5db;
+      }
+      .health-details .mcp-server {
+        background: #374151;
+        border-color: #4b5563;
+        color: #e5e7eb;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<div class="container" id="app">
-    <h1>🧠 LLM Agent Tester</h1>
-    <div class="subtitle">
-        FastAPI + Gemini + MCP — chat with your knowledge-base agent
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>🧠 Knowledge Base Agent</h1>
+  </div>
+  <div class="subtitle">Test your Gemini-powered agent with MCP tools</div>
+
+  <!-- Configuration -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <label for="api-url">🌐 API URL</label>
+        <input type="text" id="api-url" value="http://localhost:8005" />
+      </div>
+      <div>
+        <label for="user-id">👤 User ID</label>
+        <input type="text" id="user-id" value="test-user" />
+      </div>
     </div>
-
-    <!-- Server status -->
-    <div class="status-bar">
-        <div class="status-item">
-            <span class="status-badge" id="healthBadge"></span>
-            <span id="healthText">Checking health…</span>
-            <button class="btn btn-sm btn-outline" id="healthBtn">Refresh</button>
-        </div>
-        <div class="status-item">
-            <span>🛠️ <span id="toolCount">0</span> tools</span>
-            <button class="btn btn-sm btn-outline" id="toolsBtn">List</button>
-        </div>
-        <div class="status-item meta-info">
-            <span id="windowSize"></span> &middot;
-            <span id="cachedUsers"></span>
-        </div>
+    <div class="row" style="margin-top:0.6rem;">
+      <div>
+        <label for="bearer-token">🔑 Bearer Token <span style="font-weight:400;color:#6b7280;">(optional)</span></label>
+        <input type="text" id="bearer-token" placeholder="e.g. your-secret-token" />
+      </div>
     </div>
+  </div>
 
-    <!-- Chat form -->
-    <div class="section">
-        <div class="section-title">
-            💬 Chat
-            <span class="badge">POST /chat</span>
-        </div>
-
-        <div class="form-group">
-            <label for="userInput">User ID</label>
-            <input type="text" id="userInput" placeholder="e.g. user-123 or anonymous" value="test-user" />
-        </div>
-
-        <div class="form-group">
-            <label for="queryInput">Query</label>
-            <textarea id="queryInput" placeholder="Ask anything…">What is the capital of France?</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Tool selection <span style="font-weight:400;color:#64748b;">(click to toggle)</span></label>
-            <div class="tool-grid" id="toolGrid">
-                <span class="no-tools">Loading tools…</span>
-            </div>
-            <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
-                <button class="btn btn-sm btn-outline" id="selectAllTools">Select all</button>
-                <button class="btn btn-sm btn-outline" id="deselectAllTools">Deselect all</button>
-                <span style="font-size:0.8rem;color:#64748b;align-self:center;">
-                    <span id="selectedToolCount">0</span> selected
-                </span>
-            </div>
-        </div>
-
-        <div class="action-row">
-            <button class="btn btn-primary" id="sendBtn">
-                <span id="sendLabel">Send</span>
-                <span id="sendSpinner" style="display:none;" class="loading-indicator"></span>
-            </button>
-            <button class="btn btn-outline" id="clearResponseBtn">Clear response</button>
-        </div>
-
-        <div class="form-group" style="margin-top:1.5rem;">
-            <label>Response</label>
-            <div class="response-box" id="responseBox">
-                <span class="empty">Your response will appear here</span>
-            </div>
-        </div>
+  <!-- Tools -->
+  <div class="section">
+    <label>🔧 Tools</label>
+    <div class="tools-row">
+      <input type="text" id="tools-input" placeholder="e.g. search, read (comma separated), 'none' to disable, empty for all" />
+      <button id="load-tools-btn" class="secondary">⟳ Load</button>
     </div>
+    <div id="tools-display" class="tool-list"><span class="empty">Click "Load" to fetch available tools</span></div>
+  </div>
 
-    <hr />
-
-    <div style="display:flex;gap:1rem;flex-wrap:wrap;justify-content:space-between;align-items:center;">
-        <div style="font-size:0.8rem;color:#94a3b8;">
-            Server: <span id="serverUrl">http://localhost:8005</span>
-        </div>
-        <div>
-            <button class="btn btn-sm btn-outline" id="resetUserBtn">Reset user context</button>
-            <button class="btn btn-sm btn-outline" id="healthBtn2">Health</button>
-        </div>
+  <!-- Health -->
+  <div class="section">
+    <label>🩺 Health</label>
+    <div class="health-row">
+      <button id="health-btn" class="health-btn">Check Health</button>
+      <span class="health-status" id="health-status">Not checked</span>
     </div>
+    <div id="health-details" class="health-details"></div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-box" id="chat-box"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <input type="text" id="query-input" placeholder="Type your message…" />
+    <button id="send-btn">➤ Send</button>
+    <button id="clear-btn" class="secondary">✕ Clear</button>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="status">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status">Ready</span>
+    </span>
+    <span>v2.2</span>
+  </div>
 </div>
 
 <script>
-    (function() {
-        'use strict';
+  (function() {
+    // ── DOM refs ──
+    const apiUrlInput = document.getElementById('api-url');
+    const userIdInput = document.getElementById('user-id');
+    const bearerTokenInput = document.getElementById('bearer-token');
+    const toolsInput = document.getElementById('tools-input');
+    const toolsDisplay = document.getElementById('tools-display');
+    const loadToolsBtn = document.getElementById('load-tools-btn');
+    const chatBox = document.getElementById('chat-box');
+    const queryInput = document.getElementById('query-input');
+    const sendBtn = document.getElementById('send-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const statusEl = document.getElementById('status');
+    const statusDot = document.getElementById('status-dot');
+    const healthBtn = document.getElementById('health-btn');
+    const healthStatus = document.getElementById('health-status');
+    const healthDetails = document.getElementById('health-details');
 
-        // ---- DOM refs ----
-        const healthBadge = document.getElementById('healthBadge');
-        const healthText = document.getElementById('healthText');
-        const healthBtn = document.getElementById('healthBtn');
-        const healthBtn2 = document.getElementById('healthBtn2');
-        const toolsBtn = document.getElementById('toolsBtn');
-        const toolCount = document.getElementById('toolCount');
-        const windowSizeEl = document.getElementById('windowSize');
-        const cachedUsersEl = document.getElementById('cachedUsers');
-        const toolGrid = document.getElementById('toolGrid');
-        const selectAllBtn = document.getElementById('selectAllTools');
-        const deselectAllBtn = document.getElementById('deselectAllTools');
-        const selectedToolCount = document.getElementById('selectedToolCount');
-        const userInput = document.getElementById('userInput');
-        const queryInput = document.getElementById('queryInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const sendLabel = document.getElementById('sendLabel');
-        const sendSpinner = document.getElementById('sendSpinner');
-        const responseBox = document.getElementById('responseBox');
-        const clearResponseBtn = document.getElementById('clearResponseBtn');
-        const resetUserBtn = document.getElementById('resetUserBtn');
-        const serverUrlSpan = document.getElementById('serverUrl');
-
-        // ---- state ----
-        const BASE_URL = 'http://localhost:8005';  // adjust if needed
-        let availableTools = [];       // array of {name, description}
-        let selectedTools = new Set(); // names of selected tools
-        let isSending = false;
-
-        // ---- helpers ----
-        function setHealth(status, message) {
-            healthBadge.className = 'status-badge';
-            if (status === 'ok') {
-                healthBadge.classList.add('ok');
-                healthText.textContent = message || 'Healthy';
-            } else if (status === 'loading') {
-                healthBadge.classList.add('loading');
-                healthText.textContent = message || 'Checking…';
-            } else {
-                healthBadge.classList.add('fail');
-                healthText.textContent = message || 'Unreachable';
-            }
+    // ── Load stored values ──
+    function loadStored() {
+      try {
+        const saved = localStorage.getItem('agent-test');
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.apiUrl) apiUrlInput.value = data.apiUrl;
+          if (data.userId) userIdInput.value = data.userId;
+          if (data.bearerToken) bearerTokenInput.value = data.bearerToken;
+          if (data.tools) toolsInput.value = data.tools;
         }
+      } catch (_) {}
+    }
+    loadStored();
 
-        function setResponse(text, isError = false) {
-            responseBox.className = 'response-box' + (isError ? ' error' : '');
-            if (!text) {
-                responseBox.innerHTML = '<span class="empty">Your response will appear here</span>';
-                return;
-            }
-            // Preserve whitespace and escape HTML entities (basic)
-            const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            responseBox.textContent = text; // use textContent to avoid injection
-            // but we want to keep formatting, so we can set innerHTML with pre-wrap.
-            // Actually textContent will lose line breaks, but we want to preserve them.
-            // So we'll use innerHTML with escaped string.
-            // Safer: use textContent and then style white-space: pre-wrap already applied.
-            // But textContent will not interpret HTML tags, so it's safe.
-            // However we want line breaks, so we use innerHTML with <br>? Let's just use textContent and rely on pre-wrap.
-            responseBox.textContent = text;
+    function saveState() {
+      try {
+        localStorage.setItem('agent-test', JSON.stringify({
+          apiUrl: apiUrlInput.value,
+          userId: userIdInput.value,
+          bearerToken: bearerTokenInput.value,
+          tools: toolsInput.value
+        }));
+      } catch (_) {}
+    }
+    [apiUrlInput, userIdInput, bearerTokenInput, toolsInput].forEach(el => {
+      el.addEventListener('change', saveState);
+      el.addEventListener('input', saveState);
+    });
+
+    // ── Helper: get headers (including Bearer if set) ──
+    function getHeaders() {
+      const headers = { 'Content-Type': 'application/json' };
+      const token = bearerTokenInput.value.trim();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
+    }
+
+    // ── Append message ──
+    function appendMessage(role, content, isError = false, isTool = false) {
+      const div = document.createElement('div');
+      div.className = `message ${role}`;
+      if (isError) div.classList.add('error');
+      if (isTool) div.classList.add('tool-call');
+      div.textContent = content;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    clearBtn.addEventListener('click', () => {
+      chatBox.innerHTML = '';
+    });
+
+    function setStatus(msg, isError = false, isLoading = false) {
+      statusEl.textContent = msg;
+      statusDot.className = 'status-dot';
+      if (isError) statusDot.classList.add('error');
+      else if (isLoading) statusDot.classList.add('loading');
+    }
+
+    // ── Health check ──
+    async function checkHealth() {
+      const baseUrl = apiUrlInput.value.trim().replace(/\/+$/, '');
+      const url = `${baseUrl}/health`;
+      healthStatus.textContent = 'Checking…';
+      healthStatus.style.color = '#eab308';
+      healthDetails.classList.remove('show');
+      healthBtn.disabled = true;
+      setStatus('Checking health…', false, true);
+
+      try {
+        const resp = await fetch(url, {
+          headers: getHeaders()
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${data.detail || resp.statusText}`);
         }
-
-        function setErrorResponse(text) {
-            setResponse(text, true);
+        healthStatus.textContent = '✅ Healthy';
+        healthStatus.style.color = '#22c55e';
+        let detailsHtml = `
+          <div><strong>Window size:</strong> ${data.window_size}</div>
+          <div><strong>Users cached:</strong> ${data.users_cached}</div>
+          <div><strong>MCP servers (${data.mcp_servers?.length || 0}):</strong> 
+        `;
+        if (data.mcp_servers && data.mcp_servers.length > 0) {
+          data.mcp_servers.forEach(s => {
+            detailsHtml += `<span class="mcp-server">${s.server}</span> `;
+          });
+        } else {
+          detailsHtml += 'None connected';
         }
+        detailsHtml += '</div>';
+        healthDetails.innerHTML = detailsHtml;
+        healthDetails.classList.add('show');
+        setStatus('Health OK');
+      } catch (err) {
+        healthStatus.textContent = `❌ Error: ${err.message}`;
+        healthStatus.style.color = '#ef4444';
+        healthDetails.innerHTML = `<div style="color:#ef4444;">${err.message}</div>`;
+        healthDetails.classList.add('show');
+        setStatus(`Health error: ${err.message}`, true);
+        console.error(err);
+      } finally {
+        healthBtn.disabled = false;
+      }
+    }
+    healthBtn.addEventListener('click', checkHealth);
 
-        function updateToolUI() {
-            if (!availableTools.length) {
-                toolGrid.innerHTML = '<span class="no-tools">No tools available</span>';
-                selectedTools.clear();
-                updateSelectedCount();
-                return;
-            }
-            let html = '';
-            for (const t of availableTools) {
-                const selected = selectedTools.has(t.name) ? 'selected' : '';
-                html += `
-                    <span class="tool-chip ${selected}" data-tool="${t.name}" title="${t.description || ''}">
-                        <span class="tool-check">${selected ? '✓' : '☐'}</span>
-                        <span class="tool-name">${t.name}</span>
-                    </span>
-                `;
-            }
-            toolGrid.innerHTML = html;
-            // attach click listeners
-            document.querySelectorAll('.tool-chip').forEach(el => {
-                el.addEventListener('click', function(e) {
-                    const name = this.dataset.tool;
-                    if (selectedTools.has(name)) {
-                        selectedTools.delete(name);
-                    } else {
-                        selectedTools.add(name);
-                    }
-                    updateToolUI();
-                });
-            });
-            updateSelectedCount();
+    // ── Load tools ──
+    async function loadTools() {
+      const baseUrl = apiUrlInput.value.trim().replace(/\/+$/, '');
+      const url = `${baseUrl}/tools`;
+      setStatus('Loading tools…', false, true);
+      try {
+        const resp = await fetch(url, {
+          headers: getHeaders()
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        const data = await resp.json();
+        if (data.tools && data.tools.length > 0) {
+          let html = '';
+          data.tools.forEach(t => {
+            html += `<span title="${t.description || ''}">${t.name}</span>`;
+          });
+          toolsDisplay.innerHTML = html;
+          setStatus(`Loaded ${data.tools.length} tools`);
+        } else {
+          toolsDisplay.innerHTML = `<span class="empty">No tools available</span>`;
+          setStatus('No tools found');
         }
+      } catch (err) {
+        toolsDisplay.innerHTML = `<span class="empty">Error: ${err.message}</span>`;
+        setStatus(`Error: ${err.message}`, true);
+        console.error(err);
+      }
+    }
+    loadToolsBtn.addEventListener('click', loadTools);
+    window.addEventListener('load', loadTools);
 
-        function updateSelectedCount() {
-            selectedToolCount.textContent = selectedTools.size;
+    // ── Send message ──
+    async function sendMessage() {
+      const query = queryInput.value.trim();
+      if (!query) return;
+
+      const baseUrl = apiUrlInput.value.trim().replace(/\/+$/, '');
+      const user = userIdInput.value.trim() || 'test-user';
+      const toolsRaw = toolsInput.value.trim();
+
+      let tools = null;
+      if (toolsRaw.toLowerCase() === 'none') {
+        tools = [];
+      } else if (toolsRaw !== '') {
+        tools = toolsRaw.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      sendBtn.disabled = true;
+      queryInput.disabled = true;
+      setStatus('Sending…', false, true);
+
+      appendMessage('user', query);
+      queryInput.value = '';
+
+      const url = `${baseUrl}/chat`;
+      const payload = { user, query, tools };
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          const detail = data.detail || data.error || resp.statusText;
+          throw new Error(`Server ${resp.status}: ${detail}`);
         }
-
-        function getSelectedToolsArray() {
-            return selectedTools.size === 0 ? null : Array.from(selectedTools);
+        if (data.response) {
+          appendMessage('assistant', data.response);
+        } else {
+          appendMessage('assistant', JSON.stringify(data, null, 2));
         }
+        setStatus('Ready');
+      } catch (err) {
+        appendMessage('assistant', `Error: ${err.message}`, true);
+        setStatus(`Error: ${err.message}`, true);
+        console.error(err);
+      } finally {
+        sendBtn.disabled = false;
+        queryInput.disabled = false;
+        queryInput.focus();
+      }
+    }
 
-        // ---- API calls ----
-        async function fetchHealth() {
-            setHealth('loading', 'Checking…');
-            try {
-                const resp = await fetch(`${BASE_URL}/health`);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
-                setHealth('ok', 'Healthy');
-                if (data.window_size !== undefined) windowSizeEl.textContent = `window: ${data.window_size}`;
-                if (data.users_cached !== undefined) cachedUsersEl.textContent = `users: ${data.users_cached}`;
-                return data;
-            } catch (err) {
-                setHealth('fail', `Error: ${err.message}`);
-                windowSizeEl.textContent = '';
-                cachedUsersEl.textContent = '';
-                throw err;
-            }
-        }
+    sendBtn.addEventListener('click', sendMessage);
+    queryInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
 
-        async function fetchTools() {
-            try {
-                const resp = await fetch(`${BASE_URL}/tools`);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
-                availableTools = data.tools || [];
-                toolCount.textContent = availableTools.length;
-                // reset selection? We'll keep existing selections but remove any that no longer exist.
-                const newSet = new Set();
-                for (const t of availableTools) {
-                    if (selectedTools.has(t.name)) newSet.add(t.name);
-                }
-                selectedTools = newSet;
-                updateToolUI();
-                updateSelectedCount();
-                return data;
-            } catch (err) {
-                toolCount.textContent = '?';
-                toolGrid.innerHTML = `<span class="no-tools">Error loading tools: ${err.message}</span>`;
-                throw err;
-            }
-        }
-
-        async function sendChat(user, query, tools) {
-            if (isSending) return;
-            isSending = true;
-            sendBtn.disabled = true;
-            sendLabel.textContent = 'Sending';
-            sendSpinner.style.display = 'inline-block';
-            setResponse(''); // clear
-
-            const payload = {
-                user: user,
-                query: query,
-                tools: tools
-            };
-
-            try {
-                const resp = await fetch(`${BASE_URL}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    const errorMsg = data.detail || data.error || `HTTP ${resp.status}`;
-                    setErrorResponse(`❌ Error: ${errorMsg}`);
-                } else {
-                    if (data.response) {
-                        setResponse(data.response);
-                    } else {
-                        setResponse('⚠️ Received empty response from server.');
-                    }
-                }
-            } catch (err) {
-                setErrorResponse(`❌ Network error: ${err.message}`);
-            } finally {
-                isSending = false;
-                sendBtn.disabled = false;
-                sendLabel.textContent = 'Send';
-                sendSpinner.style.display = 'none';
-            }
-        }
-
-        // ---- UI event binding ----
-        async function refreshHealth() {
-            try {
-                await fetchHealth();
-            } catch (_) { /* ignore */ }
-        }
-
-        async function refreshTools() {
-            try {
-                await fetchTools();
-            } catch (_) { /* ignore */ }
-        }
-
-        function clearResponse() {
-            setResponse('');
-        }
-
-        function resetUser() {
-            // just a convenience: clear response and maybe update user field
-            clearResponse();
-            // Optionally we could set a new user ID, but we leave it.
-        }
-
-        function selectAll() {
-            selectedTools = new Set(availableTools.map(t => t.name));
-            updateToolUI();
-        }
-
-        function deselectAll() {
-            selectedTools.clear();
-            updateToolUI();
-        }
-
-        // ---- init ----
-        async function init() {
-            serverUrlSpan.textContent = BASE_URL;
-
-            // Bind events
-            healthBtn.addEventListener('click', refreshHealth);
-            healthBtn2.addEventListener('click', refreshHealth);
-            toolsBtn.addEventListener('click', refreshTools);
-            sendBtn.addEventListener('click', async () => {
-                const user = userInput.value.trim();
-                if (!user) {
-                    setErrorResponse('❌ User ID cannot be empty.');
-                    return;
-                }
-                const query = queryInput.value.trim();
-                if (!query) {
-                    setErrorResponse('❌ Query cannot be empty.');
-                    return;
-                }
-                const tools = getSelectedToolsArray();
-                await sendChat(user, query, tools);
-            });
-            clearResponseBtn.addEventListener('click', clearResponse);
-            resetUserBtn.addEventListener('click', resetUser);
-            selectAllBtn.addEventListener('click', selectAll);
-            deselectAllBtn.addEventListener('click', deselectAll);
-
-            // load initial data
-            await Promise.all([fetchHealth(), fetchTools()]);
-        }
-
-        init();
-    })();
+    queryInput.focus();
+  })();
 </script>
-
 </body>
 </html>
