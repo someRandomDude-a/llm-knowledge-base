@@ -193,6 +193,53 @@ class GeminiCore:
         await self._register_tools(name, session)
 
     # ==================================================================
+    # Schema sanitization (removes fields unsupported by Gemini)
+    # ==================================================================
+
+    def _sanitize_schema(self, schema: dict) -> dict:
+        """
+        Recursively clean a JSON Schema dict to only include properties
+        that Gemini's API supports.
+
+        Gemini's API supports the following JSON Schema properties:
+        - type, format, description, nullable, enum
+        - maxItems, minItems, properties, required, propertyOrdering, items
+        - anyOf, oneOf, allOf (combiners are supported)
+
+        Reference: https://github.com/promptfoo/promptfoo/issues/6902
+        """
+        if not isinstance(schema, dict):
+            return schema
+
+        # Only these keys are allowed by Gemini
+        supported_keys = {
+            "type", "format", "description", "nullable", "enum",
+            "maxItems", "minItems", "properties", "required",
+            "propertyOrdering", "items", "anyOf", "oneOf", "allOf"
+        }
+
+        cleaned = {}
+        for key, value in schema.items():
+            if key not in supported_keys:
+                continue
+
+            if isinstance(value, dict):
+                cleaned[key] = self._sanitize_schema(value)
+            elif isinstance(value, list):
+                cleaned[key] = [
+                    self._sanitize_schema(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            else:
+                cleaned[key] = value
+
+        # Gemini expects a single type, not a list
+        if "type" in cleaned and isinstance(cleaned["type"], list):
+            cleaned["type"] = cleaned["type"][0] if cleaned["type"] else "string"
+
+        return cleaned
+
+    # ==================================================================
     # Tool registration
     # ==================================================================
 
@@ -223,14 +270,14 @@ class GeminiCore:
             if not isinstance(input_schema, dict):
                 input_schema = {}
 
+            # Sanitize the schema to remove fields Gemini doesn't accept
+            sanitized_schema = self._sanitize_schema(input_schema)
+
             # Build proper FunctionDeclaration
-            # The SDK accepts a dict for 'parameters' at runtime,
-            # but the type stub expects a 'Schema' object.
-            # We pass the dict and ignore the type error.
             declaration = FunctionDeclaration(
                 name=gemini_name,
                 description=tool.description or f"MCP tool: {tool_name}",
-                parameters=input_schema,  # type: ignore[arg-type]
+                parameters=sanitized_schema,  # type: ignore[arg-type]
             )
 
             gemini_tool = Tool(function_declarations=[declaration])
