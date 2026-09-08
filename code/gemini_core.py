@@ -233,6 +233,19 @@ class GeminiCore:
             else:
                 cleaned[key] = value
 
+        # Post-process: filter required to match properties
+        # This prevents "property is not defined" errors.
+        if "required" in cleaned and isinstance(cleaned["required"], list):
+            properties = cleaned.get("properties", {})
+            if not isinstance(properties, dict):
+                properties = {}
+            # Keep only required fields that exist in properties
+            filtered_required = [req for req in cleaned["required"] if req in properties]
+            if filtered_required:
+                cleaned["required"] = filtered_required
+            else:
+                del cleaned["required"]  # remove if empty
+
         # Gemini expects a single type, not a list
         if "type" in cleaned and isinstance(cleaned["type"], list):
             cleaned["type"] = cleaned["type"][0] if cleaned["type"] else "string"
