@@ -1,6 +1,9 @@
 # api.py
 """
 FastAPI app for the LLM knowledge-base agent.
+
+Pure HTTP layer: routing, request/response models, auth.
+All agent / context / db / gemini logic lives elsewhere.
 """
 
 import logging
@@ -18,7 +21,9 @@ from db import ChatHistoryDB
 
 logger = logging.getLogger(__name__)
 
-# ─── Security ─────────────────────────────────────────────
+
+# --- Security ---------------------------------------------------------
+
 security = HTTPBearer(auto_error=False)
 
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
@@ -26,10 +31,11 @@ if INTERNAL_API_TOKEN is not None:
     INTERNAL_API_TOKEN = INTERNAL_API_TOKEN.strip()
     logger.info("Internal API token is set (length: %d)", len(INTERNAL_API_TOKEN))
 else:
-    logger.info("Internal API token is not set – authentication disabled")
+    logger.info("Internal API token is not set - authentication disabled")
+
 
 async def verify_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> None:
     if INTERNAL_API_TOKEN is None:
         return
@@ -55,7 +61,7 @@ async def verify_token(
         logger.warning(
             "Token mismatch. Provided: %s..., Expected: %s...",
             provided_token[:10],
-            INTERNAL_API_TOKEN[:10]
+            INTERNAL_API_TOKEN[:10],
         )
         raise HTTPException(
             status_code=401,
@@ -63,7 +69,8 @@ async def verify_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-# ─── Models ──────────────────────────────────────────────
+
+# --- Models -----------------------------------------------------------
 
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1)
@@ -75,6 +82,21 @@ class ChatResponse(BaseModel):
     user: str
     response: str
 
+class HistoryRequest(BaseModel):
+    user: str = Field(..., min_length=1)
+    limit: Optional[int] = Field(default=None, ge=1, le=1000)
+
+
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
+class HistoryResponse(BaseModel):
+    user: str
+    messages: list[HistoryMessage]
+    memories: list[str]
+    window_size: int
 
 class HealthResponse(BaseModel):
     status: str
@@ -96,9 +118,7 @@ class ErrorResponse(BaseModel):
     error: str
 
 
-# ======================================================================
-# Lifespan
-# ======================================================================
+# --- Lifespan ---------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -110,9 +130,13 @@ async def lifespan(app: FastAPI):
         await manager.start()
     except Exception:
         logger.exception("Failed to start AgentManager")
+        try:
+            await manager.close()
+        except Exception:
+            logger.exception("Error cleaning up manager after failed start")
         await db.close()
         raise
-
+    
     app.state.db = db
     app.state.manager = manager
 
@@ -132,15 +156,13 @@ async def lifespan(app: FastAPI):
             logger.exception("Error closing DB pool")
 
 
-# ======================================================================
-# App factory
-# ======================================================================
+# --- App factory ------------------------------------------------------
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="LLM Knowledge Base",
         version="2.0.0",
-        description="Gemini‑powered agent with MCP and persistent chat.",
+        description="Gemini-powered agent with MCP and persistent chat.",
         lifespan=lifespan,
     )
 
@@ -152,26 +174,39 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Routes (all protected by verify_token) ──
-    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(verify_token)])
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        dependencies=[Depends(verify_token)],
+    )
     async def health() -> HealthResponse:
         manager: AgentManager = app.state.manager
         return HealthResponse(
             status="ok",
             window_size=manager.window_size,
-            users_cached=len(manager._agents),
+            users_cached=manager.users_cached,
             mcp_servers=manager.get_mcp_status(),
         )
 
-    @app.get("/tools", response_model=ToolsResponse, dependencies=[Depends(verify_token)])
+    @app.get(
+        "/tools",
+        response_model=ToolsResponse,
+        dependencies=[Depends(verify_token)],
+    )
     async def list_tools() -> ToolsResponse:
         manager: AgentManager = app.state.manager
         return ToolsResponse(
-            tools=[ToolInfo(name=t["name"], description=t["description"])
-                   for t in manager.list_tools()]
+            tools=[
+                ToolInfo(name=t["name"], description=t["description"])
+                for t in manager.list_tools()
+            ]
         )
 
-    @app.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_token)])
+    @app.post(
+        "/chat",
+        response_model=ChatResponse,
+        dependencies=[Depends(verify_token)],
+    )
     async def chat(payload: ChatRequest) -> ChatResponse:
         manager: AgentManager = app.state.manager
         try:
@@ -182,16 +217,38 @@ def create_app() -> FastAPI:
             )
         except Exception as exc:
             logger.exception("Chat failed for user=%s", payload.user)
-            raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+            raise HTTPException(
+                status_code=500, detail=f"{type(exc).__name__}: {exc}"
+            )
         return ChatResponse(user=payload.user, response=response_text)
+
+
+    @app.post(
+        "/history",
+        response_model=HistoryResponse,
+        dependencies=[Depends(verify_token)],
+    )
+    async def get_history(payload: HistoryRequest) -> HistoryResponse:
+        manager: AgentManager = app.state.manager
+        try:
+            messages, memories = await manager.get_history(
+                payload.user, limit=payload.limit
+            )
+        except Exception as exc:
+            logger.exception("History lookup failed for user=%s", payload.user)
+            raise HTTPException(
+                status_code=500, detail=f"{type(exc).__name__}: {exc}"
+            )
+        return HistoryResponse(
+            user=payload.user,
+            messages=[
+                HistoryMessage(role=m.role, content=m.content) for m in messages
+            ],
+            memories=memories,
+            window_size=manager.window_size,
+        )
 
     return app
 
 
 app = create_app()
-
-
-if __name__ == "__main__":
-    import uvicorn
-    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-    uvicorn.run("api:app", host="0.0.0.0", port=8005, reload=True)

@@ -1,4 +1,18 @@
 # context.py
+"""
+Conversation state, rolling window, and prompt construction.
+
+Responsible for:
+    - Representing chat messages (Message)
+    - Holding the in-memory rolling window (Conversation)
+    - Rendering a prompt string from system prompt + memories +
+      recent messages + current query (ContextBuilder)
+
+Deliberately does NOT know about:
+    - Gemini or MCP
+    - The database
+    - Users or sessions
+"""
 
 from dataclasses import dataclass
 from typing import Literal, Optional
@@ -15,29 +29,64 @@ class Message:
 
 class Conversation:
     """
-    Stores the current conversation.
-    This deliberately does not know anything about Gemini.
+    In-memory rolling window of messages.
+
+    The window is enforced on every write: once the buffer is full,
+    the oldest messages are dropped. This makes the rolling window
+    a property of the conversation itself, rather than something
+    the caller has to remember to apply.
     """
 
-    def __init__(self):
+    def __init__(self, window_size: int = 20):
+        self.window_size = max(1, int(window_size))
         self.messages: list[Message] = []
 
-    def add_user(self, content: str):
-        self.messages.append(Message(role="user", content=content))
+    # --- writes ---
 
-    def add_assistant(self, content: str):
-        self.messages.append(Message(role="assistant", content=content))
+    def add_user(self, content: str) -> None:
+        self._append(Message(role="user", content=content))
 
-    def clear(self):
+    def add_assistant(self, content: str) -> None:
+        self._append(Message(role="assistant", content=content))
+
+    def extend(self, messages: list[Message]) -> None:
+        """
+        Replace the buffer with the given messages, then apply the
+        rolling window. Used when rehydrating from persistence.
+        """
+        self.messages = list(messages)
+        self._trim()
+
+    def clear(self) -> None:
         self.messages.clear()
 
-    def recent(self, count: int = 20) -> list[Message]:
-        return self.messages[-count:]
+    # --- reads ---
+
+    def recent(self, count: Optional[int] = None) -> list[Message]:
+        if count is None:
+            return list(self.messages)
+        return list(self.messages[-count:])
+
+    def __len__(self) -> int:
+        return len(self.messages)
+
+    # --- internals ---
+
+    def _append(self, message: Message) -> None:
+        self.messages.append(message)
+        self._trim()
+
+    def _trim(self) -> None:
+        if len(self.messages) > self.window_size:
+            del self.messages[: len(self.messages) - self.window_size]
 
 
 class ContextBuilder:
     """
-    Converts agent state into the prompt sent to Gemini.
+    Renders a prompt string from the system prompt, long-term memories,
+    the rolling conversation window, and the current user query.
+
+    Format-only: no Gemini types, no MCP types.
     """
 
     def __init__(
@@ -53,16 +102,14 @@ class ContextBuilder:
         query: str,
         memories: Optional[list[str]] = None,
     ) -> str:
-        sections = []
+        sections: list[str] = []
 
-        # System
         sections.append(
             "SYSTEM INSTRUCTIONS\n"
             "===================\n"
             f"{self.system_prompt}"
         )
 
-        # Memories (if any)
         if memories:
             memory_text = "\n".join(f"- {m}" for m in memories)
             sections.append(
@@ -71,8 +118,7 @@ class ContextBuilder:
                 f"{memory_text}"
             )
 
-        # Recent conversation
-        messages = self.conversation.recent(count=20)
+        messages = self.conversation.recent()
         if messages:
             lines = []
             for msg in messages:
@@ -83,7 +129,6 @@ class ContextBuilder:
                 "===================\n" + "\n".join(lines)
             )
 
-        # Current user message
         sections.append(
             "CURRENT USER MESSAGE\n"
             "====================\n"

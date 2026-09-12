@@ -1,15 +1,21 @@
 # main.py
+"""
+Interactive CLI for local testing.
+
+Uses AgentManager (same as the HTTP server) so the code path exercised
+here is identical to the one used in production, minus the HTTP layer.
+"""
 
 import asyncio
 import logging
 import os
 
-from agent import Agent
 from dotenv import load_dotenv
+
+from agent import AgentManager
 
 load_dotenv()
 
-# Configure logging so we see messages from MCP/Gemini
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -18,18 +24,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
-    agent = Agent(
-        mcp_config="mcp.json",
-    )
+async def main() -> None:
+    manager = AgentManager(mcp_config="mcp.json")
 
     try:
-        logger.info("Starting agent...")
-        await agent.start()
-        logger.info("Agent started successfully.")
+        logger.info("Starting agent manager...")
+        await manager.start()
+        logger.info("Agent manager started.")
 
-        # List available tools
-        tools = agent.list_tools()
+        tools = manager.list_tools()
         if tools:
             print("\nAvailable tools:")
             for t in tools:
@@ -58,7 +61,7 @@ async def main():
                 break
 
             try:
-                response = await agent.get_llm_response(query)
+                response = await manager.chat(user_id="cli", query=query)
                 print()
                 print(f"Assistant: {response}")
                 print()
@@ -69,11 +72,11 @@ async def main():
                 print()
 
     except Exception as exc:
-        logger.exception("Failed to start agent")
+        logger.exception("Failed to start agent manager")
         print(f"Startup error: {exc}")
     finally:
-        await agent.close()
-        logger.info("Agent closed.")
+        await manager.close()
+        logger.info("Agent manager closed.")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,15 @@
 # db.py
 """
 Async PostgreSQL-backed persistent chat history and memories.
+
+Low-level persistence only. Knows nothing about Gemini, MCP,
+prompts, or rolling windows beyond "give me the last N messages".
 """
 
 import json
 import os
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional
 
 import asyncpg
 from asyncpg import Pool, Record
@@ -31,7 +34,7 @@ def get_connection_string() -> str:
 
 
 # ======================================================================
-# ChatHistoryDB (async)
+# ChatHistoryDB
 # ======================================================================
 
 class ChatHistoryDB:
@@ -76,7 +79,6 @@ class ChatHistoryDB:
 
     async def _init_schema(self) -> None:
         async with self._acquire() as conn:
-            # Chat history table – enabled_tools as JSONB
             await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self.table_name} (
                     id              BIGSERIAL PRIMARY KEY,
@@ -93,8 +95,6 @@ class ChatHistoryDB:
                     idx_{self.table_name}_user_id_id
                 ON {self.table_name} (user_id, id DESC)
             """)
-
-            # Memories table
             await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self.memories_table} (
                     user_id     VARCHAR(255) NOT NULL,
@@ -115,11 +115,9 @@ class ChatHistoryDB:
         content: str,
         enabled_tools: Optional[list[str]] = None,
     ) -> int:
-        """
-        Insert a message. Returns the new row id.
-        """
-        # Convert list to JSON string. This works for both JSONB and TEXT columns.
-        enabled_tools_json = json.dumps(enabled_tools) if enabled_tools is not None else None
+        enabled_tools_json = (
+            json.dumps(enabled_tools) if enabled_tools is not None else None
+        )
 
         async with self._acquire() as conn:
             row: Optional[Record] = await conn.fetchrow(
@@ -137,6 +135,20 @@ class ChatHistoryDB:
             if row is None:
                 raise RuntimeError("Failed to insert message; no row returned.")
             return row["id"]
+
+    async def add_messages(
+            self, 
+            user_id: str, 
+            entries: list[tuple[str, str, list[str] | None]]
+            ) -> None:
+        async with self._acquire() as conn:
+            async with conn.transaction():
+                for role, content, enabled_tools in entries:
+                    enabled_tools_json = json.dumps(enabled_tools) if enabled_tools is not None else None
+                    await conn.execute(
+                        f"INSERT INTO {self.table_name} (user_id, role, content, enabled_tools) VALUES ($1,$2,$3,$4)",
+                        user_id, role, content, enabled_tools_json,
+                    )
 
     async def get_recent_messages(
         self,
@@ -163,13 +175,7 @@ class ChatHistoryDB:
                 limit,
             )
 
-        return [
-            Message(
-                role=row["role"],
-                content=row["content"],
-            )
-            for row in rows
-        ]
+        return [Message(role=row["role"], content=row["content"]) for row in rows]
 
     async def count_messages(self, user_id: str) -> int:
         async with self._acquire() as conn:
@@ -206,7 +212,10 @@ class ChatHistoryDB:
     async def delete_memory(self, user_id: str, memory: str) -> None:
         async with self._acquire() as conn:
             await conn.execute(
-                f"DELETE FROM {self.memories_table} WHERE user_id = $1 AND memory_text = $2",
+                f"""
+                DELETE FROM {self.memories_table}
+                WHERE user_id = $1 AND memory_text = $2
+                """,
                 user_id,
                 memory,
             )

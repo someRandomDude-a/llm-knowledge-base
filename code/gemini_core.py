@@ -1,4 +1,22 @@
 # gemini_core.py
+"""
+Gemini + MCP protocol layer.
+
+Responsible for:
+    - Gemini API client and model calls
+    - MCP transport (stdio + streamable HTTP)
+    - MCP session lifecycle
+    - MCP tool discovery
+    - MCP -> Gemini tool conversion
+    - MCP tool execution
+    - The multi-turn Gemini function-calling loop
+
+Deliberately does NOT know about:
+    - Users, sessions, or persistence
+    - Conversation history
+    - Prompt formatting
+    - Rolling windows
+"""
 
 import json
 import logging
@@ -23,26 +41,6 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiCore:
-    """
-    Part 1 of the agent.
-
-    Responsibilities:
-        - Gemini API
-        - MCP connections
-        - MCP sessions
-        - MCP tool discovery
-        - MCP -> Gemini tool conversion
-        - MCP tool execution
-        - Gemini responses
-
-    Does NOT handle:
-        - conversation history
-        - memories
-        - long-term context
-        - persistence
-        - UI
-    """
-
     def __init__(
         self,
         mcp_config_path: str = "mcp.json",
@@ -51,20 +49,16 @@ class GeminiCore:
         self.model = model
         self.mcp_config_path = Path(mcp_config_path)
 
-        # --------------------------------------------------------------
-        # Gemini
-        # --------------------------------------------------------------
+        # --- Gemini ---
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY environment variable is not set.")
         self.client = genai.Client(api_key=api_key)
 
-        # --------------------------------------------------------------
-        # MCP
-        # --------------------------------------------------------------
+        # --- MCP ---
         self.exit_stack = AsyncExitStack()
         self.sessions: dict[str, ClientSession] = {}
-        self.gemini_tools: list[Tool] = []   # list of Tool objects
+        self.gemini_tools: list[Tool] = []
         self.tool_servers: dict[str, str] = {}   # gemini_name -> server_name
         self.mcp_tools: dict[str, Any] = {}      # gemini_name -> MCP tool
         self.started = False
@@ -77,8 +71,12 @@ class GeminiCore:
     def _expand_env(value: Any) -> Any:
         if isinstance(value, str):
             pattern = r"\$\{([^}]+)\}"
-            def repl(match: re.Match[str]) -> str:
-                return os.getenv(match.group(1), "")
+
+            def repl(match):
+                var = match.group(1)
+                if var not in os.environ:
+                    raise RuntimeError(f"mcp.json references unset env var '{var}'")
+                return os.environ[var]
             return re.sub(pattern, repl, value)
         if isinstance(value, list):
             return [GeminiCore._expand_env(item) for item in value]
@@ -98,7 +96,7 @@ class GeminiCore:
         return self._expand_env(config)
 
     # ==================================================================
-    # Start
+    # Start / shutdown
     # ==================================================================
 
     async def start(self) -> None:
@@ -111,11 +109,30 @@ class GeminiCore:
             try:
                 await self._connect_server(str(name), server_config)
             except Exception as exc:
-                logger.error("[MCP] FAILED: %s - %s: %s", name, type(exc).__name__, exc)
+                logger.error(
+                    "[MCP] FAILED: %s - %s: %s", name, type(exc).__name__, exc
+                )
 
         self.started = True
         logger.info("[MCP] Connected servers: %d", len(self.sessions))
         logger.info("[MCP] Available tools: %d", len(self.gemini_tools))
+
+    async def close(self) -> None:
+        try:
+            await self.exit_stack.aclose()
+        except Exception:
+            logger.exception("Error closing MCP exit stack")
+        finally:
+            self.sessions.clear()
+            self.gemini_tools.clear()
+            self.tool_servers.clear()
+            self.mcp_tools.clear()
+            try:
+                await self.client.aio.aclose()
+            except Exception:
+                logger.exception("Error closing Gemini client")
+            finally:
+                self.started = False
 
     # ==================================================================
     # MCP connection dispatcher
@@ -127,7 +144,9 @@ class GeminiCore:
         elif "url" in config:
             await self._connect_http_server(name, config)
         else:
-            raise ValueError(f"MCP server '{name}' must specify either 'command' or 'url'.")
+            raise ValueError(
+                f"MCP server '{name}' must specify either 'command' or 'url'."
+            )
 
     # ==================================================================
     # STDIO MCP
@@ -146,11 +165,7 @@ class GeminiCore:
         if executable is None:
             raise RuntimeError(f"Could not find MCP executable '{command}'.")
 
-        params = StdioServerParameters(
-            command=executable,
-            args=args,
-            env=process_env,
-        )
+        params = StdioServerParameters(command=executable, args=args, env=process_env)
 
         logger.info("[MCP] Starting: %s", name)
         read, write = await self.exit_stack.enter_async_context(stdio_client(params))
@@ -168,9 +183,16 @@ class GeminiCore:
         url = config.get("url")
         if not isinstance(url, str):
             raise ValueError(f"Invalid URL for MCP server '{name}'.")
-        headers = {str(k): str(v) for k, v in config.get("headers", {}).items()}
 
-        # Timeouts from environment (seconds)
+        raw = config.get("headers", {})
+        headers = {}
+        for k, v in raw.items():
+            value = str(v)
+            if not value.strip():
+                logger.warning("[MCP] %s: skipping empty header %r (check env var)", name, k)
+                continue
+            headers[str(k)] = value
+            
         timeout_float = float(os.getenv("MCP_HTTP_TIMEOUT", "60.0"))
         read_timeout = float(os.getenv("MCP_HTTP_READ_TIMEOUT", "300.0"))
         timeout = httpx2.Timeout(timeout_float, read=read_timeout)
@@ -186,43 +208,32 @@ class GeminiCore:
         read_stream, write_stream = await self.exit_stack.enter_async_context(
             streamable_http_client(url, http_client=http_client)
         )
-        session = await self.exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        session = await self.exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
         await session.initialize()
         self.sessions[name] = session
         logger.info("[MCP] Connected: %s", name)
         await self._register_tools(name, session)
 
     # ==================================================================
-    # Schema sanitization (removes fields unsupported by Gemini)
+    # Schema sanitisation
     # ==================================================================
 
     def _sanitize_schema(self, schema: dict) -> dict:
-        """
-        Recursively clean a JSON Schema dict to only include properties
-        that Gemini's API supports.
-
-        Gemini's API supports the following JSON Schema properties:
-        - type, format, description, nullable, enum
-        - maxItems, minItems, properties, required, propertyOrdering, items
-        - anyOf, oneOf, allOf (combiners are supported)
-
-        Reference: https://github.com/promptfoo/promptfoo/issues/6902
-        """
         if not isinstance(schema, dict):
             return schema
 
-        # Only these keys are allowed by Gemini
         supported_keys = {
             "type", "format", "description", "nullable", "enum",
             "maxItems", "minItems", "properties", "required",
-            "propertyOrdering", "items", "anyOf", "oneOf", "allOf"
+            "propertyOrdering", "items", "anyOf", "oneOf", "allOf",
         }
 
-        cleaned = {}
+        cleaned: dict[str, Any] = {}
         for key, value in schema.items():
             if key not in supported_keys:
                 continue
-
             if isinstance(value, dict):
                 cleaned[key] = self._sanitize_schema(value)
             elif isinstance(value, list):
@@ -233,20 +244,18 @@ class GeminiCore:
             else:
                 cleaned[key] = value
 
-        # Post-process: filter required to match properties
-        # This prevents "property is not defined" errors.
         if "required" in cleaned and isinstance(cleaned["required"], list):
             properties = cleaned.get("properties", {})
             if not isinstance(properties, dict):
                 properties = {}
-            # Keep only required fields that exist in properties
-            filtered_required = [req for req in cleaned["required"] if req in properties]
+            filtered_required = [
+                req for req in cleaned["required"] if req in properties
+            ]
             if filtered_required:
                 cleaned["required"] = filtered_required
             else:
-                del cleaned["required"]  # remove if empty
+                del cleaned["required"]
 
-        # Gemini expects a single type, not a list
         if "type" in cleaned and isinstance(cleaned["type"], list):
             cleaned["type"] = cleaned["type"][0] if cleaned["type"] else "string"
 
@@ -261,14 +270,12 @@ class GeminiCore:
         tools = result.tools
         logger.info("[MCP] %s: %d tools", server_name, len(tools))
 
-        # Keep track of already registered Gemini names to avoid collisions
         used_names = set(self.tool_servers.keys())
 
         for tool in tools:
             tool_name = str(tool.name)
             gemini_name = tool_name
 
-            # If collision, prefix with server name and, if still taken, add a counter
             if gemini_name in used_names:
                 base = f"{server_name}__{tool_name}"
                 gemini_name = base
@@ -279,14 +286,14 @@ class GeminiCore:
 
             used_names.add(gemini_name)
 
-            input_schema = getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", {})
+            input_schema = getattr(tool, "inputSchema", None) or getattr(
+                tool, "input_schema", {}
+            )
             if not isinstance(input_schema, dict):
                 input_schema = {}
 
-            # Sanitize the schema to remove fields Gemini doesn't accept
             sanitized_schema = self._sanitize_schema(input_schema)
 
-            # Build proper FunctionDeclaration
             declaration = FunctionDeclaration(
                 name=gemini_name,
                 description=tool.description or f"MCP tool: {tool_name}",
@@ -295,17 +302,18 @@ class GeminiCore:
 
             gemini_tool = Tool(function_declarations=[declaration])
             self.gemini_tools.append(gemini_tool)
-
             self.tool_servers[gemini_name] = server_name
             self.mcp_tools[gemini_name] = tool
 
             logger.debug("    - %s", gemini_name)
 
     # ==================================================================
-    # Execute MCP tool
+    # Tool execution
     # ==================================================================
 
-    async def _call_mcp_tool(self, gemini_tool_name: str, arguments: dict[str, Any]) -> Any:
+    async def _call_mcp_tool(
+        self, gemini_tool_name: str, arguments: dict[str, Any]
+    ) -> Any:
         if gemini_tool_name not in self.tool_servers:
             raise RuntimeError(f"Unknown MCP tool: {gemini_tool_name}")
 
@@ -319,10 +327,6 @@ class GeminiCore:
 
         result = await session.call_tool(actual_tool_name, arguments)
         return self._serialize_mcp_result(result)
-
-    # ==================================================================
-    # Serialize MCP result
-    # ==================================================================
 
     @staticmethod
     def _serialize_mcp_result(result: Any) -> Any:
@@ -340,14 +344,11 @@ class GeminiCore:
         output = []
         for item in content:
             text = getattr(item, "text", None)
-            if text is not None:
-                output.append(text)
-            else:
-                output.append(str(item))
+            output.append(text if text is not None else str(item))
         return "\n".join(output)
 
     # ==================================================================
-    # Gemini
+    # Gemini response loop
     # ==================================================================
 
     async def get_response(
@@ -361,10 +362,7 @@ class GeminiCore:
         tools_to_use = tools if tools is not None else self.gemini_tools
 
         contents: list[Any] = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)]
-            )
+            types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
         ]
 
         max_tool_rounds = 20
@@ -384,13 +382,11 @@ class GeminiCore:
                 return response.text or ""
 
             if response.candidates:
-                model_content = response.candidates[0].content
-                contents.append(model_content)
+                contents.append(response.candidates[0].content)
 
             function_response_parts = []
             for function_call in function_calls:
                 name = function_call.name
-                # Gemini should always provide a name; guard against None
                 if name is None:
                     raise RuntimeError("Function call name is None")
 
@@ -398,49 +394,35 @@ class GeminiCore:
                 try:
                     result = await self._call_mcp_tool(name, arguments)
                 except Exception as exc:
+                    logger.exception(f"[MCP] Tool call failed: {name}")
                     result = {"error": f"{type(exc).__name__}: {exc}"}
+
                 function_response_parts.append(
                     types.Part.from_function_response(
                         name=name,
-                        response={"result": result}
+                        response={"result": result},
                     )
                 )
 
             contents.append(
-                types.Content(
-                    role="user",
-                    parts=function_response_parts,
-                )
+                types.Content(role="user", parts=function_response_parts)
             )
 
         raise RuntimeError("Gemini exceeded the maximum number of MCP tool rounds.")
 
     # ==================================================================
-    # Tool discovery (public)
+    # Discovery (public)
     # ==================================================================
 
     def list_mcp_tools(self) -> list[dict[str, str]]:
         result = []
         for gemini_name, tool in self.mcp_tools.items():
-            description = getattr(tool, "description", None) or f"MCP tool: {getattr(tool, 'name', gemini_name)}"
+            description = (
+                getattr(tool, "description", None)
+                or f"MCP tool: {getattr(tool, 'name', gemini_name)}"
+            )
             result.append({"name": str(gemini_name), "description": str(description)})
         return result
 
     def get_mcp_status(self) -> list[dict[str, str]]:
-        """Return status of connected MCP servers."""
         return [{"server": name, "status": "connected"} for name in self.sessions.keys()]
-
-    # ==================================================================
-    # Shutdown
-    # ==================================================================
-
-    async def close(self) -> None:
-        try:
-            await self.exit_stack.aclose()
-        finally:
-            self.sessions.clear()
-            self.gemini_tools.clear()
-            self.tool_servers.clear()
-            self.mcp_tools.clear()
-            await self.client.aio.aclose()
-            self.started = False
