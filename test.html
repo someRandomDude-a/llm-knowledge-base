@@ -5,13 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🧠 Knowledge Base Agent</title>
   <style>
-    /* ── Reset & Base ── */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(145deg, #f6f9fc 0%, #e9f1f8 100%);
@@ -21,29 +15,18 @@
       justify-content: center;
       padding: 1.5rem;
     }
-
     .container {
       max-width: 820px;
       width: 100%;
-      background: rgba(255, 255, 255, 0.75);
+      background: rgba(255,255,255,0.75);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-radius: 2rem;
       padding: 2rem 2rem 1.8rem;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25),
-                  inset 0 1px 2px rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      transition: all 0.3s ease;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 2px rgba(255,255,255,0.8);
+      border: 1px solid rgba(255,255,255,0.5);
     }
-
-    /* ── Header ── */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.25rem;
-    }
-
+    .header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; }
     .header h1 {
       font-size: 1.9rem;
       font-weight: 700;
@@ -53,7 +36,6 @@
       background-clip: text;
       letter-spacing: -0.02em;
     }
-
     .subtitle {
       color: #4b5563;
       font-size: 0.95rem;
@@ -63,23 +45,9 @@
       border-left: 4px solid #3b82f6;
       padding-left: 0.9rem;
     }
-
-    /* ── Controls Section ── */
-    .section {
-      margin-bottom: 1.2rem;
-    }
-
-    .row {
-      display: flex;
-      gap: 0.8rem;
-      flex-wrap: wrap;
-    }
-
-    .row > * {
-      flex: 1;
-      min-width: 150px;
-    }
-
+    .section { margin-bottom: 1.2rem; }
+    .row { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 150px; }
     label {
       display: block;
       font-weight: 600;
@@ -89,43 +57,23 @@
       color: #374151;
       margin-bottom: 0.3rem;
     }
-
-    input,
-    select {
+    input, select {
       width: 100%;
       padding: 0.6rem 0.9rem;
       border: 1px solid #d1d5db;
       border-radius: 12px;
       font-size: 0.95rem;
-      background: rgba(255, 255, 255, 0.7);
+      background: rgba(255,255,255,0.7);
       backdrop-filter: blur(4px);
       transition: border-color 0.2s, box-shadow 0.2s;
       outline: none;
     }
-
-    input:focus {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-    }
-
-    /* ── Tools row ── */
-    .tools-row {
-      display: flex;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .tools-row input {
-      flex: 3;
-    }
-
-    .tools-row button {
-      flex: 0 0 auto;
-    }
-
+    input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+    .tools-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+    .tools-row input { flex: 3; }
+    .tools-row button { flex: 0 0 auto; }
     .tool-list {
-      background: rgba(255, 255, 255, 0.5);
+      background: rgba(255,255,255,0.5);
       backdrop-filter: blur(4px);
       padding: 0.6rem 0.8rem;
       border-radius: 16px;
@@ -138,7 +86,6 @@
       gap: 0.4rem;
       margin-top: 0.4rem;
     }
-
     .tool-list span {
       display: inline-block;
       background: white;
@@ -150,48 +97,20 @@
       color: #1f2937;
       box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     }
-
-    .tool-list .empty {
-      color: #9ca3af;
-      font-style: italic;
-      font-weight: 400;
-      background: transparent;
-      border: none;
-      box-shadow: none;
-      padding: 0.2rem 0;
-    }
-
-    /* ── Health row ── */
-    .health-row {
-      display: flex;
-      gap: 0.8rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .health-status {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
-
+    .tool-list .empty { color: #9ca3af; font-style: italic; font-weight: 400; background: transparent; border: none; box-shadow: none; padding: 0.2rem 0; }
+    .health-row { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
+    .health-status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; font-weight: 500; }
     .health-details {
       margin-top: 0.4rem;
       font-size: 0.85rem;
       color: #374151;
-      background: rgba(255, 255, 255, 0.4);
+      background: rgba(255,255,255,0.4);
       padding: 0.5rem 0.8rem;
       border-radius: 12px;
       border: 1px solid #e5e7eb;
       display: none;
     }
-
-    .health-details.show {
-      display: block;
-    }
-
+    .health-details.show { display: block; }
     .health-details .mcp-server {
       display: inline-block;
       background: white;
@@ -201,32 +120,21 @@
       border: 1px solid #d1d5db;
       margin: 0.2rem 0.2rem 0 0;
     }
-
-    /* ── Chat Box ── */
     .chat-box {
       border-radius: 20px;
       padding: 1rem 1.2rem;
       height: 380px;
       overflow-y: auto;
-      background: rgba(255, 255, 255, 0.5);
+      background: rgba(255,255,255,0.5);
       backdrop-filter: blur(4px);
-      border: 1px solid rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(255,255,255,0.7);
       margin-bottom: 0.8rem;
       scroll-behavior: smooth;
       box-shadow: inset 0 2px 6px rgba(0,0,0,0.02);
     }
-
-    .chat-box::-webkit-scrollbar {
-      width: 6px;
-    }
-    .chat-box::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    .chat-box::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 20px;
-    }
-
+    .chat-box::-webkit-scrollbar { width: 6px; }
+    .chat-box::-webkit-scrollbar-track { background: transparent; }
+    .chat-box::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; }
     .message {
       margin: 0.6rem 0;
       padding: 0.6rem 1rem;
@@ -238,14 +146,12 @@
       animation: fadeUp 0.25s ease;
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-
     .message.user {
       background: linear-gradient(135deg, #dbeafe, #bfdbfe);
       margin-left: auto;
       border-bottom-right-radius: 4px;
       color: #1e3a8a;
     }
-
     .message.assistant {
       background: white;
       border: 1px solid #e5e7eb;
@@ -253,13 +159,7 @@
       border-bottom-left-radius: 4px;
       color: #1f2937;
     }
-
-    .message.error {
-      background: #fee2e2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-    }
-
+    .message.error { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
     .message.tool-call {
       background: #f3f4f6;
       border: 1px dashed #9ca3af;
@@ -270,8 +170,6 @@
       text-align: center;
       font-family: monospace;
     }
-
-    /* ── Controls ── */
     .controls {
       display: flex;
       gap: 0.6rem;
@@ -279,12 +177,7 @@
       align-items: center;
       margin-top: 0.2rem;
     }
-
-    .controls input[type="text"] {
-      flex: 2;
-      min-width: 150px;
-    }
-
+    .controls input[type="text"] { flex: 2; min-width: 150px; }
     button {
       padding: 0.6rem 1.4rem;
       border: none;
@@ -295,47 +188,34 @@
       transition: all 0.2s ease;
       background: #3b82f6;
       color: white;
-      box-shadow: 0 4px 8px -4px rgba(59, 130, 246, 0.4);
+      box-shadow: 0 4px 8px -4px rgba(59,130,246,0.4);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.4rem;
     }
-
-    button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 16px -6px rgba(59, 130, 246, 0.5);
+    button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 16px -6px rgba(59,130,246,0.5); }
+    button:active:not(:disabled) { transform: scale(0.96); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    button.secondary { background: #6b7280; box-shadow: 0 4px 8px -4px rgba(107,114,128,0.3); }
+    button.secondary:hover:not(:disabled) { box-shadow: 0 8px 16px -6px rgba(107,114,128,0.4); }
+    button.health-btn { background: #10b981; box-shadow: 0 4px 8px -4px rgba(16,185,129,0.4); }
+    button.health-btn:hover:not(:disabled) { box-shadow: 0 8px 16px -6px rgba(16,185,129,0.5); }
+    .protocol-warning {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 12px;
+      padding: 0.5rem 1rem;
+      margin-top: 0.5rem;
+      display: none;
+      align-items: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      font-size: 0.9rem;
     }
-
-    button:active:not(:disabled) {
-      transform: scale(0.96);
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-
-    button.secondary {
-      background: #6b7280;
-      box-shadow: 0 4px 8px -4px rgba(107, 114, 128, 0.3);
-    }
-
-    button.secondary:hover:not(:disabled) {
-      box-shadow: 0 8px 16px -6px rgba(107, 114, 128, 0.4);
-    }
-
-    button.health-btn {
-      background: #10b981;
-      box-shadow: 0 4px 8px -4px rgba(16, 185, 129, 0.4);
-    }
-
-    button.health-btn:hover:not(:disabled) {
-      box-shadow: 0 8px 16px -6px rgba(16, 185, 129, 0.5);
-    }
-
+    .protocol-warning.show { display: flex; }
+    .protocol-warning button { background: #f59e0b; box-shadow: 0 4px 8px -4px rgba(245,158,11,0.4); }
+    .protocol-warning button:hover { box-shadow: 0 8px 16px -6px rgba(245,158,11,0.5); }
     .footer {
       margin-top: 1.2rem;
       display: flex;
@@ -346,13 +226,7 @@
       border-top: 1px solid #e5e7eb;
       padding-top: 1rem;
     }
-
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
+    .status { display: flex; align-items: center; gap: 0.5rem; }
     .status-dot {
       display: inline-block;
       width: 8px;
@@ -361,148 +235,51 @@
       background: #22c55e;
       transition: background 0.2s;
     }
-
-    .status-dot.error {
-      background: #ef4444;
+    .status-dot.error { background: #ef4444; }
+    .status-dot.loading { background: #eab308; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width:600px) {
+      .container { padding: 1.2rem; }
+      .header h1 { font-size: 1.5rem; }
+      .row, .controls, .health-row { flex-direction: column; }
+      .controls input { width: 100%; }
+      .message { max-width: 95%; }
     }
-
-    .status-dot.loading {
-      background: #eab308;
-      animation: pulse 1s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* ── Responsive ── */
-    @media (max-width: 600px) {
-      .container {
-        padding: 1.2rem;
-      }
-      .header h1 {
-        font-size: 1.5rem;
-      }
-      .row {
-        flex-direction: column;
-      }
-      .controls {
-        flex-direction: column;
-      }
-      .controls input {
-        width: 100%;
-      }
-      .message {
-        max-width: 95%;
-      }
-      .health-row {
-        flex-direction: column;
-        align-items: stretch;
-      }
-    }
-
-    /* ── Dark mode ── */
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(145deg, #111827, #1f2937);
-      }
-      .container {
-        background: rgba(31, 41, 55, 0.8);
-        backdrop-filter: blur(16px);
-        border-color: rgba(55, 65, 81, 0.6);
-      }
-      .header h1 {
-        background: linear-gradient(135deg, #93c5fd, #fcd34d, #f87171);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
-      .subtitle {
-        color: #9ca3af;
-        border-left-color: #60a5fa;
-      }
-      label {
-        color: #d1d5db;
-      }
-      input, select {
-        background: rgba(55, 65, 81, 0.6);
-        border-color: #4b5563;
-        color: #f3f4f6;
-      }
-      input:focus {
-        border-color: #60a5fa;
-        box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25);
-      }
-      .tool-list {
-        background: rgba(55, 65, 81, 0.4);
-        border-color: #4b5563;
-      }
-      .tool-list span {
-        background: #374151;
-        border-color: #4b5563;
-        color: #e5e7eb;
-      }
-      .chat-box {
-        background: rgba(31, 41, 55, 0.5);
-        border-color: rgba(55, 65, 81, 0.6);
-      }
-      .message.user {
-        background: linear-gradient(135deg, #1e3a8a, #1e40af);
-        color: #bfdbfe;
-      }
-      .message.assistant {
-        background: #374151;
-        border-color: #4b5563;
-        color: #f3f4f6;
-      }
-      .message.error {
-        background: #7f1d1d;
-        border-color: #991b1b;
-        color: #fecaca;
-      }
-      .message.tool-call {
-        background: #1f2937;
-        border-color: #4b5563;
-        color: #d1d5db;
-      }
-      .footer {
-        border-top-color: #374151;
-        color: #9ca3af;
-      }
-      .health-details {
-        background: rgba(55, 65, 81, 0.4);
-        border-color: #4b5563;
-        color: #d1d5db;
-      }
-      .health-details .mcp-server {
-        background: #374151;
-        border-color: #4b5563;
-        color: #e5e7eb;
-      }
+      body { background: linear-gradient(145deg, #111827, #1f2937); }
+      .container { background: rgba(31,41,55,0.8); backdrop-filter: blur(16px); border-color: rgba(55,65,81,0.6); }
+      .header h1 { background: linear-gradient(135deg, #93c5fd, #fcd34d, #f87171); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+      .subtitle { color: #9ca3af; border-left-color: #60a5fa; }
+      label { color: #d1d5db; }
+      input, select { background: rgba(55,65,81,0.6); border-color: #4b5563; color: #f3f4f6; }
+      input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.25); }
+      .tool-list { background: rgba(55,65,81,0.4); border-color: #4b5563; }
+      .tool-list span { background: #374151; border-color: #4b5563; color: #e5e7eb; }
+      .chat-box { background: rgba(31,41,55,0.5); border-color: rgba(55,65,81,0.6); }
+      .message.user { background: linear-gradient(135deg, #1e3a8a, #1e40af); color: #bfdbfe; }
+      .message.assistant { background: #374151; border-color: #4b5563; color: #f3f4f6; }
+      .message.error { background: #7f1d1d; border-color: #991b1b; color: #fecaca; }
+      .message.tool-call { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
+      .footer { border-top-color: #374151; color: #9ca3af; }
+      .health-details { background: rgba(55,65,81,0.4); border-color: #4b5563; color: #d1d5db; }
+      .health-details .mcp-server { background: #374151; border-color: #4b5563; color: #e5e7eb; }
+      .protocol-warning { background: #1e293b; border-color: #f59e0b; color: #fcd34d; }
     }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <!-- Header -->
-  <div class="header">
-    <h1>🧠 Knowledge Base Agent</h1>
-  </div>
-  <div class="subtitle">Test your Gemini-powered agent with MCP tools</div>
+  <div class="header"><h1>🧠 Knowledge Base Agent</h1></div>
+  <div class="subtitle">Test your Gemini‑powered agent with MCP tools</div>
 
   <!-- Configuration -->
   <div class="section">
     <div class="row">
       <div>
         <label for="api-url">🌐 API URL</label>
-        <input type="text" id="api-url" value="http://localhost:8005" />
+        <input type="text" id="api-url" placeholder="e.g. http://localhost:8005 or https://..." />
       </div>
       <div>
         <label for="user-id">👤 User ID</label>
@@ -514,6 +291,11 @@
         <label for="bearer-token">🔑 Bearer Token <span style="font-weight:400;color:#6b7280;">(optional)</span></label>
         <input type="text" id="bearer-token" placeholder="e.g. your-secret-token" />
       </div>
+    </div>
+    <!-- Protocol mismatch warning -->
+    <div id="protocol-warning" class="protocol-warning">
+      <span>⚠️ Page is HTTPS but API URL uses HTTP. Mixed content will be blocked.</span>
+      <button id="fix-protocol-btn">Use HTTPS (same origin)</button>
     </div>
   </div>
 
@@ -549,11 +331,8 @@
 
   <!-- Footer -->
   <div class="footer">
-    <span class="status">
-      <span class="status-dot" id="status-dot"></span>
-      <span id="status">Ready</span>
-    </span>
-    <span>v2.2</span>
+    <span class="status"><span class="status-dot" id="status-dot"></span><span id="status">Ready</span></span>
+    <span>v2.6</span>
   </div>
 </div>
 
@@ -575,6 +354,8 @@
     const healthBtn = document.getElementById('health-btn');
     const healthStatus = document.getElementById('health-status');
     const healthDetails = document.getElementById('health-details');
+    const protocolWarning = document.getElementById('protocol-warning');
+    const fixProtocolBtn = document.getElementById('fix-protocol-btn');
 
     // ── Load stored values ──
     function loadStored() {
@@ -583,14 +364,23 @@
         if (saved) {
           const data = JSON.parse(saved);
           if (data.apiUrl) apiUrlInput.value = data.apiUrl;
+          else apiUrlInput.value = window.location.origin;
           if (data.userId) userIdInput.value = data.userId;
           if (data.bearerToken) bearerTokenInput.value = data.bearerToken;
           if (data.tools) toolsInput.value = data.tools;
+        } else {
+          // Default: use current origin (matches page protocol)
+          apiUrlInput.value = window.location.origin;
         }
-      } catch (_) {}
+      } catch (_) {
+        apiUrlInput.value = window.location.origin;
+      }
+      // Show/hide protocol warning
+      checkProtocolMismatch();
     }
     loadStored();
 
+    // ── Save state ──
     function saveState() {
       try {
         localStorage.setItem('agent-test', JSON.stringify({
@@ -606,7 +396,24 @@
       el.addEventListener('input', saveState);
     });
 
-    // ── Helper: get headers (including Bearer if set) ──
+    // ── Protocol warning ──
+    function checkProtocolMismatch() {
+      const url = apiUrlInput.value.trim();
+      const pageProtocol = window.location.protocol;
+      if (pageProtocol === 'https:' && url.startsWith('http://') && !url.startsWith('http://localhost')) {
+        protocolWarning.classList.add('show');
+      } else {
+        protocolWarning.classList.remove('show');
+      }
+    }
+    apiUrlInput.addEventListener('input', checkProtocolMismatch);
+    fixProtocolBtn.addEventListener('click', function() {
+      apiUrlInput.value = window.location.origin;
+      saveState();
+      checkProtocolMismatch();
+    });
+
+    // ── Helper: get headers ──
     function getHeaders() {
       const headers = { 'Content-Type': 'application/json' };
       const token = bearerTokenInput.value.trim();
@@ -616,7 +423,7 @@
       return headers;
     }
 
-    // ── Append message ──
+    // ── Chat functions ──
     function appendMessage(role, content, isError = false, isTool = false) {
       const div = document.createElement('div');
       div.className = `message ${role}`;
@@ -626,10 +433,7 @@
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
-
-    clearBtn.addEventListener('click', () => {
-      chatBox.innerHTML = '';
-    });
+    clearBtn.addEventListener('click', () => { chatBox.innerHTML = ''; });
 
     function setStatus(msg, isError = false, isLoading = false) {
       statusEl.textContent = msg;
@@ -638,7 +442,7 @@
       else if (isLoading) statusDot.classList.add('loading');
     }
 
-    // ── Health check ──
+    // ── Health ──
     async function checkHealth() {
       const baseUrl = apiUrlInput.value.trim().replace(/\/+$/, '');
       const url = `${baseUrl}/health`;
@@ -649,13 +453,9 @@
       setStatus('Checking health…', false, true);
 
       try {
-        const resp = await fetch(url, {
-          headers: getHeaders()
-        });
+        const resp = await fetch(url, { headers: getHeaders() });
         const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${data.detail || resp.statusText}`);
-        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${data.detail || resp.statusText}`);
         healthStatus.textContent = '✅ Healthy';
         healthStatus.style.color = '#22c55e';
         let detailsHtml = `
@@ -664,9 +464,7 @@
           <div><strong>MCP servers (${data.mcp_servers?.length || 0}):</strong> 
         `;
         if (data.mcp_servers && data.mcp_servers.length > 0) {
-          data.mcp_servers.forEach(s => {
-            detailsHtml += `<span class="mcp-server">${s.server}</span> `;
-          });
+          data.mcp_servers.forEach(s => { detailsHtml += `<span class="mcp-server">${s.server}</span> `; });
         } else {
           detailsHtml += 'None connected';
         }
@@ -693,16 +491,12 @@
       const url = `${baseUrl}/tools`;
       setStatus('Loading tools…', false, true);
       try {
-        const resp = await fetch(url, {
-          headers: getHeaders()
-        });
+        const resp = await fetch(url, { headers: getHeaders() });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         const data = await resp.json();
         if (data.tools && data.tools.length > 0) {
           let html = '';
-          data.tools.forEach(t => {
-            html += `<span title="${t.description || ''}">${t.name}</span>`;
-          });
+          data.tools.forEach(t => { html += `<span title="${t.description || ''}">${t.name}</span>`; });
           toolsDisplay.innerHTML = html;
           setStatus(`Loaded ${data.tools.length} tools`);
         } else {
